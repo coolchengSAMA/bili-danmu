@@ -88,39 +88,21 @@ pub(crate) fn sender_set_config(
 ) -> Result<config::SenderConfig, String> {
     let old_hotkey = state.hotkey.lock().unwrap().clone();
     if sender.hotkey != old_hotkey {
-        shortcut::apply_hotkey(&app, &sender.hotkey)?;
+        shortcut::apply_hotkey(&app, &old_hotkey, &sender.hotkey)?;
         *state.hotkey.lock().unwrap() = sender.hotkey.clone();
         *state.hotkey_error.lock().unwrap() = None;
+    } else if !sender.hotkey.is_empty() && state.hotkey_error.lock().unwrap().is_some() {
+        // 上次没注册上（例如启动时被别的程序占着）：借这次保存再试一次，
+        // 用户可能已经关掉那个程序了。失败也不拦保存，只更新提示。
+        match shortcut::apply_hotkey(&app, "", &sender.hotkey) {
+            Ok(()) => *state.hotkey_error.lock().unwrap() = None,
+            Err(e) => *state.hotkey_error.lock().unwrap() = Some(e),
+        }
     }
     apply_sender_visible(&app, sender.visible)?;
     config::save_sender_config(&app, &sender)?;
     let _ = app.emit("sender-config", &sender);
     Ok(sender)
-}
-
-/// 显示 / 隐藏发送框（设置页开关与托盘菜单调用；快捷键走内部 `toggle_sender`）
-#[tauri::command]
-pub(crate) fn sender_set_visible(
-    app: AppHandle,
-    state: State<'_, SenderState>,
-    visible: bool,
-) -> Result<bool, String> {
-    let v = apply_sender_visible(&app, visible)?;
-    let hotkey = state.hotkey.lock().unwrap().clone();
-    config::save_sender_config(
-        &app,
-        &config::SenderConfig {
-            visible: v,
-            hotkey,
-        },
-    )?;
-    Ok(v)
-}
-
-/// 查询发送框是否可见（读内存态，理由同 `overlay_is_visible`）
-#[tauri::command]
-pub(crate) fn sender_is_visible(state: State<'_, SenderState>) -> bool {
-    *state.visible.lock().unwrap()
 }
 
 /// 查询上次快捷键注册失败的原因（启动时被占用也走这里；无错返回 None）

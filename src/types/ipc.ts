@@ -144,7 +144,8 @@ export interface SenderConfig {
 /** 发送框默认配置（与 config/types.rs 的 SenderConfig::default 保持一致） */
 export const DEFAULT_SENDER_CONFIG: SenderConfig = {
   visible: true,
-  hotkey: 'Alt+KeyQ',
+  // 默认不注册全局热键（会系统级占用该组合键），由用户在设置页自己录
+  hotkey: '',
 }
 
 /** Overlay 弹幕样式（Rust ↔ Vue） */

@@ -263,8 +263,9 @@ impl Default for SenderConfig {
     fn default() -> Self {
         Self {
             visible: true,
-            // Alt+KeyQ：绕开常见游戏用键（F1-F12 / 空格），默认开箱可用且可在设置页改
-            hotkey: "Alt+KeyQ".into(),
+            // 默认**不**注册：全局热键会被系统级占用，默认值等于替用户抢走一个组合键
+            // （可能正是某个游戏在用的），改由用户在设置页自己录一个
+            hotkey: String::new(),
         }
     }
 }

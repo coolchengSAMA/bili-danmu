@@ -64,8 +64,18 @@ pub fn run() {
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .build()
         })
-        // 全局快捷键：发送框显示/隐藏（注册在 setup 里做，见 shortcut::apply_hotkey）
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // 全局快捷键：发送框显示/隐藏。事件处理挂在这里（对该插件所有已注册快捷键生效），
+        // 具体键位的注册/注销在 setup 与设置页里做，见 shortcut::apply_hotkey
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // 只认按下：按下与松开各触发一次的话等于没切
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        commands::toggle_sender(app);
+                    }
+                })
+                .build(),
+        )
         .manage(AppState {
             status: Mutex::new(state::RoomStatus::Disconnected),
             cancel: Mutex::new(None),
@@ -186,14 +196,15 @@ pub fn run() {
                     log::warn!("[sender] 启动时隐藏失败: {e}");
                 }
             }
-            match shortcut::apply_hotkey(app.handle(), &cfg.sender.hotkey) {
+            // 启动时没有旧键位要注销，故 old 传空串
+            match shortcut::apply_hotkey(app.handle(), "", &cfg.sender.hotkey) {
                 Ok(()) if !cfg.sender.hotkey.is_empty() => {
                     log::info!("[sender] 已注册显示/隐藏快捷键 {}", cfg.sender.hotkey);
                 }
                 Ok(()) => log::info!("[sender] 未设置快捷键（可在设置页录制）"),
                 Err(e) => {
-                    log::warn!("[sender] 快捷键 {e}，可在设置页改一个");
-                    // 让设置页也能看到：避免「配置写着 Alt+Q、实际被占用没注册上」的假象
+                    log::warn!("[sender] 快捷键{e}，可在设置页改一个");
+                    // 让设置页也能看到：避免「配置里写着某键位、实际被占用没注册上」的假象
                     *app.state::<SenderState>().hotkey_error.lock().unwrap() = Some(e);
                 }
             }
@@ -296,8 +307,6 @@ pub fn run() {
             commands::overlay_set_always_on_top,
             commands::sender_get_config,
             commands::sender_set_config,
-            commands::sender_set_visible,
-            commands::sender_is_visible,
             commands::sender_hotkey_error,
             commands::get_dashboard_status,
             commands::overlay_get_style,

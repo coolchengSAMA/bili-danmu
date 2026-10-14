@@ -2,6 +2,8 @@
 //!
 //! 为什么必须系统级注册：前端 keydown 和菜单快捷键只在应用有焦点时有效，
 //! 游戏占着前台时收不到，只有 `RegisterHotKey` 这条路（tauri-plugin-global-shortcut）能响应。
+//! 代价是注册成功后该组合键被**系统级占用**——其它程序（包括游戏）都收不到它，
+//! 所以默认不注册，由用户在设置页自己录一个。
 //!
 //! 快捷键串格式：`修饰键 + 一个键码`，如 `Alt+KeyQ` / `Ctrl+Shift+Digit1` / `F8`；
 //! 键码用 UI Events 的 code 名，`Code::from_str` 直接认。空串 = 不注册。
@@ -9,7 +11,7 @@
 
 use std::str::FromStr;
 use tauri::AppHandle;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 /// 解析快捷键串；失败返回可直接展示给用户的中文原因
 pub(crate) fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
@@ -40,22 +42,34 @@ pub(crate) fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     Ok(Shortcut::new(if mods.is_empty() { None } else { Some(mods) }, code))
 }
 
-/// 注销旧快捷键并注册新的（空串 = 只注销）
-pub(crate) fn apply_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
-    let gs = app.global_shortcut();
-    gs.unregister_all()
-        .map_err(|e| format!("注销旧快捷键失败：{e}"))?;
-    if hotkey.trim().is_empty() {
+/// 把注册从 `old` 换成 `new`（空串表示只注销）
+///
+/// 顺序是「先注册新的、成功后再注销旧的」，失败时保留原来能用的那个：早先写法是
+/// `unregister_all()` 打头，注册失败就等于把用户已有的可用键位一并丢掉；而且
+/// `unregister_all` 会把将来新增的其它快捷键（roadmap 里的 TTS / 穿透）也一起清掉，
+/// 所以这里只动这两个具体的 Shortcut。事件处理在 lib.rs 注册插件时用
+/// `Builder::with_handler` 挂上，本函数只负责生命周期。
+pub(crate) fn apply_hotkey(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
+    let old = old.trim();
+    let new = new.trim();
+    if old == new {
         return Ok(());
     }
-    let sc = parse_hotkey(hotkey)?;
-    gs.on_shortcut(sc, |app, _sc, event| {
-        // 只认按下：否则按下与松开各触发一次，等于没切
-        if event.state == ShortcutState::Pressed {
-            crate::commands::toggle_sender(app);
+    let gs = app.global_shortcut();
+    if !new.is_empty() {
+        let sc = parse_hotkey(new)?;
+        gs.register(sc)
+            .map_err(|e| format!("注册失败（可能已被其它程序占用）：{e}"))?;
+    }
+    if !old.is_empty() {
+        if let Ok(sc) = parse_hotkey(old) {
+            // 旧键位注销失败不影响新键位已生效
+            if let Err(e) = gs.unregister(sc) {
+                log::warn!("[sender] 注销旧快捷键 {old} 失败: {e}");
+            }
         }
-    })
-    .map_err(|e| format!("注册失败（可能已被其它程序占用）：{e}"))
+    }
+    Ok(())
 }
 
 #[cfg(test)]
