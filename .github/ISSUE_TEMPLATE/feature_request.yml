@@ -1,0 +1,48 @@
+name: 💡 功能建议
+description: 想要的新功能，或对现有体验的改进
+title: '[建议] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork。
+        > 面向**上游原有功能**的建议，直接提到[上游仓库](https://github.com/bd-dxg/bili-danmu/issues)更容易被采纳。
+  - type: textarea
+    id: pain
+    attributes:
+      label: 场景 / 痛点
+      description: 你在什么情况下觉得不方便？越具体越好（例如「玩不锁鼠标的射击游戏时，鼠标扫过发送框就误点」）
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望的行为
+      description: 描述交互本身即可，不一定要写实现方案
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案（可选）
+      description: 现在是怎么绕过去的？想过哪些别的做法？
+    validations:
+      required: false
+  - type: dropdown
+    id: pr
+    attributes:
+      label: 是否愿意自己提 PR
+      options:
+        - 可以试试，希望先帮忙看看方向
+        - 愿意，我已经有改法
+        - 只想提个想法，不打算改代码
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其它补充（可选）
+      description: 截图、参考实现、相关 issue / PR 链接等
+    validations:
+      required: false
