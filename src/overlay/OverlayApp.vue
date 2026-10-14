@@ -179,15 +179,18 @@ function upsertGift(b: BackingEvent) {
 /** 补上「粉丝牌是否来自当前房间」的展示标记（决定本房牌绿 / 其它房牌灰）
  *
  * 预览行例外：测试弹幕在未连接直播间时也要能看到「本房牌」配色，此时 currentRoomId 为 0，
- * 正常判定会把所有牌都判成「其它房」，故预览行直接用它自带 is_room_medal 标记。 */
+ * 正常判定会把所有牌都判成「其它房」，故预览行直接用它自带 is_room_medal 标记。
+ *
+ * isPreview 一起在这里补上（而不是调用方再展开一次）：这是每条弹幕都要走的路径，
+ * 高频直播间每秒几十条，能省一次对象拷贝就省一次。 */
 function markRoomMedal<T extends { medal_room_id?: number; preview?: boolean; is_room_medal?: boolean }>(
   d: T,
-): T & { isRoomMedal: boolean } {
+): T & { isRoomMedal: boolean; isPreview: boolean } {
   const isRoom =
     d.preview && d.is_room_medal !== undefined
       ? d.is_room_medal
       : d.medal_room_id !== undefined && currentRoomId.value !== 0 && d.medal_room_id === currentRoomId.value
-  return { ...d, isRoomMedal: isRoom }
+  return { ...d, isRoomMedal: isRoom, isPreview: !!d.preview }
 }
 
 /** 礼物区行数上限（至少 1，防止配置被改成 0 时列表全空） */
@@ -254,7 +257,7 @@ onMounted(async () => {
     if (!d.preview && !shouldShowDanmaku(d, filter.value)) {
       return
     }
-    pushDanmaku({ ...markRoomMedal(d), isPreview: !!d.preview })
+    pushDanmaku(markRoomMedal(d))
   })
   unlistenGift = await listen<BackingEvent>('gift', e => {
     upsertGift(e.payload)
@@ -476,25 +479,25 @@ onUnmounted(() => {
 
 /* 头衔列（窗口左缘到面板底色左缘这条竖带）：鼠标进入弹幕窗才浮出，
    平时完全透明——直播时鼠标扫过弹幕窗不会留下常驻线条。
-   与 .drag-strip 的 hover 提示同一套机制，不新增常显元素。 */
+   提示写法与 .drag-strip 同一套机制，但**只过渡 opacity**：淡底与虚线写成常值，
+   靠 opacity 显隐，动画就只走合成层（与 .row-enter 同一条规矩，见 Agents.md 的性能约定）。 */
 .title-band {
   position: absolute;
   left: 6px;
   top: calc(6px + 1.4em);
   bottom: 6px;
   width: var(--panel-inset);
+  background: rgba(255, 255, 255, 0.05);
   /* 右侧那条虚线就是面板底色的左边界 */
-  border-right: 1px dashed transparent;
+  border-right: 1px dashed rgba(255, 255, 255, 0.35);
+  opacity: 0;
   /* 不接管任何鼠标行为：这一段仍然由根节点负责拖动 */
   pointer-events: none;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
+  transition: opacity 0.12s ease;
 }
 
 .overlay-root:hover .title-band {
-  background: rgba(255, 255, 255, 0.05);
-  border-right-color: rgba(255, 255, 255, 0.35);
+  opacity: 1;
 }
 
 /* 缩放手柄：中心对齐面板底色的可见左边缘，抓取宽度放宽到 9px
