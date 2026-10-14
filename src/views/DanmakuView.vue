@@ -7,7 +7,16 @@ import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
 import SenderWindowPanel from '../components/SenderWindowPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
 import { useSaveTip } from '../composables/useSaveTip'
-import { DEFAULT_DANMAKU_FILTER, DEFAULT_OVERLAY_STYLE, type DanmakuFilter, type OverlayStyle } from '../types/ipc'
+import { emitDanmakuPreview } from '../danmaku-preview'
+import {
+  DEFAULT_DANMAKU_FILTER,
+  DEFAULT_OVERLAY_STYLE,
+  type DanmakuFilter,
+  type GiftConfig,
+  type OverlayStyle,
+  type RoomStatusEvent,
+  type WelcomeConfig,
+} from '../types/ipc'
 
 // 初值用共用默认值，挂载后从 Rust 拉真实配置
 const style = ref<OverlayStyle>({ ...DEFAULT_OVERLAY_STYLE })
@@ -46,6 +55,43 @@ async function applyFilter(next: DanmakuFilter) {
     showSaved()
   } catch (e) {
     showError(e)
+  }
+}
+
+// 「发送测试弹幕」的进行态与结果提示（详见 src/danmaku-preview.ts 里的三条设计约束）
+const previewBusy = ref(false)
+const previewHint = ref('')
+
+/** 往弹幕窗推一组本地测试弹幕：不发到直播间，只是走真实事件通道让弹幕窗画出来 */
+async function sendPreview() {
+  if (previewBusy.value) return
+  previewBusy.value = true
+  previewHint.value = ''
+  try {
+    // 弹幕窗隐藏时先显示，否则点了看不到任何反应（预览的目的就是「看一眼」）
+    if (!(await invoke<boolean>('overlay_is_visible'))) {
+      await invoke('overlay_set_visible', { visible: true })
+    }
+    const st = await invoke<RoomStatusEvent>('get_connection_status')
+    const roomId = 'roomId' in st && st.roomId ? st.roomId : 0
+    const gift = await invoke<GiftConfig>('gift_get_config')
+    const welcome = await invoke<WelcomeConfig>('welcome_get_config')
+    // 预览不绕过样式开关：关掉的部分不推，并在提示里说明，避免「怎么没有礼物行」的困惑
+    const skipped: string[] = []
+    if (!gift.enabled) skipped.push('礼物区')
+    if (!welcome.enabled) skipped.push('欢迎信息')
+    const n = await emitDanmakuPreview({
+      roomId,
+      includeGift: gift.enabled,
+      includeWelcome: welcome.enabled,
+    })
+    previewHint.value = skipped.length
+      ? `已发送 ${n} 条（${skipped.join(' / ')}已关闭，未包含对应样例）`
+      : `已发送 ${n} 条`
+  } catch (e) {
+    previewHint.value = String(e)
+  } finally {
+    previewBusy.value = false
   }
 }
 
@@ -164,6 +210,22 @@ onMounted(async () => {
           </div>
         </SettingRow>
 
+        <SettingRow label="测试弹幕">
+          <div class="preview-box">
+            <button type="button" class="save-btn" :disabled="previewBusy" @click="sendPreview">
+              {{ previewBusy ? '发送中…' : '发送测试弹幕' }}
+            </button>
+            <span v-if="previewHint" class="preview-hint">{{ previewHint }}</span>
+          </div>
+        </SettingRow>
+
+        <p class="tip">
+          在弹幕窗里按真实渲染路径画一组样例：普通观众 / 房管 / 舰长 / 提督 / 总督 / 荣耀等级 / 本房与其它房粉丝牌 /
+          彩色弹幕 / 长文本换行；礼物区与欢迎信息开启时还会带上礼物、连击更新、醒目留言、上舰与欢迎行。
+          只在本地弹幕窗显示，不会发到直播间；但行是真画上去的，推流时会出现在直播画面里。
+          再点一次会替换上一组，真弹幕一条都不会被删。
+        </p>
+
         <p v-if="savedTip" class="saved">✓ 已应用并保存</p>
       </div>
     </section>
@@ -196,6 +258,19 @@ onMounted(async () => {
 /* 设置卡片 / 标签栏 / 开关 / 下拉 / 提示 / 滑块 / 数值见全局 src/styles/settings.css */
 .select {
   min-width: 150px;
+}
+
+/* 测试弹幕：按钮 + 就地结果提示（提示会带「礼物区已关闭」这类说明，故允许换行） */
+.preview-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preview-hint {
+  color: var(--text-faint);
+  font-size: 14px;
 }
 
 .color-picker {

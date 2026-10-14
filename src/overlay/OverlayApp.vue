@@ -133,7 +133,19 @@ function pushWelcome(w: WelcomeEvent) {
     is_admin: false,
     isRoomMedal: false,
     isWelcome: true,
+    isPreview: !!w.preview,
   })
+}
+
+/**
+ * 清掉上一组预览行（设置页再次点「发送测试弹幕」时由 `preview-reset` 触发）
+ *
+ * **只删带预览标记的行**：真弹幕、真礼物、真欢迎行一条都不动。预览行 id 也带 `preview-` 前缀，
+ * 与真弹幕不会撞。测试弹幕只是「本地多画几行」，不参与任何真实数据。
+ */
+function clearPreviewRows() {
+  danmakuList.value = danmakuList.value.filter(d => !d.isPreview)
+  giftList.value = giftList.value.filter(b => !b.preview)
 }
 
 /**
@@ -164,12 +176,18 @@ function upsertGift(b: BackingEvent) {
   }
 }
 
-/** 补上「粉丝牌是否来自当前房间」的展示标记（决定本房牌绿 / 其它房牌灰） */
-function markRoomMedal<T extends { medal_room_id?: number }>(d: T): T & { isRoomMedal: boolean } {
-  return {
-    ...d,
-    isRoomMedal: d.medal_room_id !== undefined && currentRoomId.value !== 0 && d.medal_room_id === currentRoomId.value,
-  }
+/** 补上「粉丝牌是否来自当前房间」的展示标记（决定本房牌绿 / 其它房牌灰）
+ *
+ * 预览行例外：测试弹幕在未连接直播间时也要能看到「本房牌」配色，此时 currentRoomId 为 0，
+ * 正常判定会把所有牌都判成「其它房」，故预览行直接用它自带 is_room_medal 标记。 */
+function markRoomMedal<T extends { medal_room_id?: number; preview?: boolean; is_room_medal?: boolean }>(
+  d: T,
+): T & { isRoomMedal: boolean } {
+  const isRoom =
+    d.preview && d.is_room_medal !== undefined
+      ? d.is_room_medal
+      : d.medal_room_id !== undefined && currentRoomId.value !== 0 && d.medal_room_id === currentRoomId.value
+  return { ...d, isRoomMedal: isRoom }
 }
 
 /** 礼物区行数上限（至少 1，防止配置被改成 0 时列表全空） */
@@ -193,6 +211,8 @@ let unlistenGift: UnlistenFn | undefined
 let unlistenGiftCfg: UnlistenFn | undefined
 let unlistenWelcome: UnlistenFn | undefined
 let unlistenWelcomeCfg: UnlistenFn | undefined
+// 设置页再点「发送测试弹幕」时先清上一组预览行（只清带 preview 标记的）
+let unlistenPreviewReset: UnlistenFn | undefined
 
 /// 弹幕过滤判定：
 /// 身份规则（舰长/房管、有粉丝牌、荣耀等级）为「或」关系——任一开启的规则命中即显示；
@@ -229,11 +249,12 @@ onMounted(async () => {
   })
   unlistenDanmu = await listen<DanmakuEvent>('danmaku', e => {
     const d = e.payload as DisplayDanmaku
-    // 过滤：不满足配置规则（敏感词命中/身份不匹配）的弹幕整条丢弃
-    if (!shouldShowDanmaku(d, filter.value)) {
+    // 过滤：不满足配置规则（敏感词命中/身份不匹配）的弹幕整条丢弃。
+    // 预览行（设置页「发送测试弹幕」）绕过过滤：它的用途是看徽章/样式，被内容规则拦掉会让人以为按钮坏了
+    if (!d.preview && !shouldShowDanmaku(d, filter.value)) {
       return
     }
-    pushDanmaku(markRoomMedal(d))
+    pushDanmaku({ ...markRoomMedal(d), isPreview: !!d.preview })
   })
   unlistenGift = await listen<BackingEvent>('gift', e => {
     upsertGift(e.payload)
@@ -249,6 +270,10 @@ onMounted(async () => {
     if (!e.payload.enabled) {
       dropWelcomeRows()
     }
+  })
+  // 测试弹幕：每次推送新一组前先清掉上一组预览行（真弹幕不受影响）
+  unlistenPreviewReset = await listen('preview-reset', () => {
+    clearPreviewRows()
   })
   unlistenStyle = await listen<OverlayStyle>('overlay-style', e => {
     style.value = e.payload
@@ -299,6 +324,7 @@ onUnmounted(() => {
   unlistenGiftCfg?.()
   unlistenWelcome?.()
   unlistenWelcomeCfg?.()
+  unlistenPreviewReset?.()
 })
 </script>
 

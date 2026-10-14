@@ -33,6 +33,11 @@ export interface DanmakuEvent {
   wealth_level?: number
   /** 是否房管 */
   is_admin: boolean
+  /** 本地测试弹幕（设置页「发送测试弹幕」）：绕过显示过滤，并可按标记整组清除，见 danmaku-preview.ts */
+  preview?: boolean
+  /** 预览行自带的本房粉丝牌标记：未连接直播间时 overlay 的 currentRoomId 为 0，
+   *  正常判定会把所有牌都判成「其它房」，靠这个字段才能在未连接时也看到「本房牌」配色 */
+  is_room_medal?: boolean
 }
 
 /** Overlay 弹幕行数据：弹幕事件 + 展示所需的派生标记 */
@@ -41,6 +46,8 @@ export interface DisplayDanmaku extends DanmakuEvent {
   isRoomMedal: boolean
   /** 欢迎信息行：不显示用户名，正文用弱化色（与弹幕区分） */
   isWelcome?: boolean
+  /** 本行来自「发送测试弹幕」的预览（下次预览时整组清掉，真弹幕不受影响） */
+  isPreview?: boolean
 }
 
 /**
@@ -66,6 +73,8 @@ export interface BackingEvent {
   // ---- 用户身份（礼物行只用身份前缀与荣耀等级） ----
   guard_level?: number
   wealth_level?: number
+  /** 本地测试预览（同上，见 danmaku-preview.ts） */
+  preview?: boolean
 }
 
 /** 礼物列表配置（Rust ↔ Vue，事件名 gift-config） */
@@ -117,6 +126,8 @@ export interface WelcomeEvent {
   timestamp: number
   /** 舰队：3舰长 2提督 1总督；只有舰长进场带得出来 */
   guard_level?: number
+  /** 本地测试预览（同上，见 danmaku-preview.ts） */
+  preview?: boolean
 }
 
 /** 欢迎信息配置（Rust ↔ Vue，事件名 welcome-config） */
