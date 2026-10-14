@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import {
@@ -209,6 +210,19 @@ function shouldShowDanmaku(d: DanmakuEvent, f: DanmakuFilter): boolean {
   )
 }
 
+/** 从面板底色左边缘开始拖拽缩放（左边缘是头衔列，见模板里的 .resize-handle-west）
+ *
+ * 交给系统做：DPI、min_inner_size、贴边吸附都走窗口自己的逻辑，与拖系统边缘等价。
+ * 必须 preventDefault，否则会命中根元素的 data-tauri-drag-region，变成拖动窗口。 */
+async function startResizeWest(e: MouseEvent) {
+  e.preventDefault()
+  try {
+    await getCurrentWindow().startResizeDragging('West')
+  } catch (err) {
+    console.error('从面板左边缘缩放失败', err)
+  }
+}
+
 onMounted(async () => {
   unlistenRoom = await listen<RoomStatusEvent>('room-status', e => {
     applyConnStatus(e.payload)
@@ -314,6 +328,14 @@ onUnmounted(() => {
         <DanmakuRow v-for="d in danmakuList" :key="d.id" :d="d" :overlay-style="style" />
       </div>
     </div>
+
+    <!-- 头衔列的边界提示：面板底色左侧那条竖带是留给舰长 / 房管 / 粉丝牌的，
+         平时完全透明（常驻线条会被 OBS 一起录进画面），鼠标进入弹幕窗时浮出淡底与虚线。 -->
+    <div class="title-band" />
+    <!-- 缩放手柄：把「能缩放的位置」挪到看得见的底色边缘上。
+         系统给的缩放热区固定在窗口最外缘（实测只有 3px），离这条边有 5.15em 远，
+         用户按直觉抓可见边缘时只能拖动窗口、以为什么都抓不到。 -->
+    <div class="resize-handle-west" @mousedown="startResizeWest" />
   </div>
 </template>
 
@@ -424,5 +446,41 @@ onUnmounted(() => {
 
 .overlay-root:hover .drag-hint {
   opacity: 1;
+}
+
+/* 头衔列（窗口左缘到面板底色左缘这条竖带）：鼠标进入弹幕窗才浮出，
+   平时完全透明——直播时鼠标扫过弹幕窗不会留下常驻线条。
+   与 .drag-strip 的 hover 提示同一套机制，不新增常显元素。 */
+.title-band {
+  position: absolute;
+  left: 6px;
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: var(--panel-inset);
+  /* 右侧那条虚线就是面板底色的左边界 */
+  border-right: 1px dashed transparent;
+  /* 不接管任何鼠标行为：这一段仍然由根节点负责拖动 */
+  pointer-events: none;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.overlay-root:hover .title-band {
+  background: rgba(255, 255, 255, 0.05);
+  border-right-color: rgba(255, 255, 255, 0.35);
+}
+
+/* 缩放手柄：中心对齐面板底色的可见左边缘，抓取宽度放宽到 9px
+   （系统热区在窗口最外缘、只有 3px，离这条边 5.15em，按直觉抓不到）。
+   位置用同一个 --panel-inset 推导，字号变大时仍贴在边界上。 */
+.resize-handle-west {
+  position: absolute;
+  /* -4.5px + 9px 宽 = 手柄中心正好落在面板底色左边缘上（6px + --panel-inset） */
+  left: calc(6px + var(--panel-inset) - 4.5px);
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: 9px;
+  cursor: ew-resize;
 }
 </style>
