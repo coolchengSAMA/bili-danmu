@@ -4,6 +4,9 @@
 
 <p align="center">2.9 MB 的安装包，一个不跟游戏抢资源的 B 站弹幕助手</p>
 
+> **本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork**，功能与上游**有差异**：额外加了「发送框可整条隐藏 + 全局快捷键唤出」「测试弹幕（一键预览全部样式）」「弹幕窗左侧边界提示与缩放手柄」，以及两处修复（按住右键拖出窗口不再弹菜单、输入框未登录时给禁用提示）。差异清单、截图与安装包见[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases)。
+> **上游仓库始终是唯一官方源**：装机请优先用[上游 Releases](https://github.com/bd-dxg/bili-danmu/releases/latest)，问题与需求也请优先反馈给上游。
+
 ## 开发背景
 
 - 以前在用的弹幕助手早已停更，B 站弹幕协议更新后已无法正常接收弹幕。
