@@ -102,6 +102,8 @@ pub(crate) fn sender_set_config(
     }
     apply_sender_visible(&app, sender.visible)?;
     config::save_sender_config(&app, &sender)?;
+    // 设置页是显式保存动作：同步落盘后同步「已落盘值」，免得周期任务再写一遍
+    *state.saved_visible.lock().unwrap() = sender.visible;
     Ok(sender)
 }
 
@@ -126,21 +128,13 @@ fn apply_sender_visible(app: &AppHandle, visible: bool) -> Result<bool, String> 
 /// 翻转发送框可见性（全局快捷键与托盘菜单共用）
 ///
 /// 这里不能用 `State<'_, SenderState>`：快捷键回调与托盘事件只拿得到 `AppHandle`。
+/// **不在这里落盘**：热键回调跑在主线程（插件的隐藏窗口建在主线程），而写盘是整份 config 的
+/// load-modify-save + DPAPI 加解密——每按一下写一次会让主线程跟着磁盘走。可见性先只改内存态，
+/// 由周期任务 `window::flush_sender_visible` 去重后落盘（连续按十下只在停手后写一次）。
 pub(crate) fn toggle_sender(app: &AppHandle) {
     let visible = !*app.state::<SenderState>().visible.lock().unwrap();
     if let Err(e) = apply_sender_visible(app, visible) {
         log::warn!("[sender] 切换可见性失败: {e}");
-        return;
-    }
-    let hotkey = app.state::<SenderState>().hotkey.lock().unwrap().clone();
-    if let Err(e) = config::save_sender_config(
-        app,
-        &config::SenderConfig {
-            visible,
-            hotkey,
-        },
-    ) {
-        log::warn!("[sender] 保存可见性失败: {e}");
     }
 }
 

@@ -3,7 +3,7 @@
 //! 窗口的创建与事件绑定在 `lib.rs` 的 setup 里，这里只放被多处复用的操作。
 
 use crate::config;
-use crate::state::OverlayState;
+use crate::state::{OverlayState, SenderState};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// 获取 Overlay 窗口实例（不存在返回 None）
@@ -99,6 +99,27 @@ pub(crate) fn set_sender_visible(app: &AppHandle, visible: bool) -> Result<bool,
         win.hide().map_err(|e| format!("隐藏发送框失败: {e}"))?;
     }
     Ok(visible)
+}
+
+/// 发送框可见性：内存态与已落盘值不同则写盘（去重）
+///
+/// 快捷键 / 托盘切换只改内存态（见 `commands::toggle_sender`），落盘交给这个函数，
+/// 由 lib.rs 里与 `flush_overlay_bounds` 同一个 2s 周期任务调用：
+///  - 连续按十下：中途写盘与否都不重要，停手后最多 2s 落一次，且来回切回原值就完全不写；
+///  - 代价是「切完立刻退出应用」时最后一次切换可能没落盘（与窗口位置同款取舍，
+///    这两个状态都不是关键数据）；
+///  - 保存失败保持「未落盘」，下个 tick 自动重试。
+pub(crate) fn flush_sender_visible(app: &AppHandle) {
+    let st = app.state::<SenderState>();
+    let visible = *st.visible.lock().unwrap();
+    if visible == *st.saved_visible.lock().unwrap() {
+        return;
+    }
+    let hotkey = st.hotkey.lock().unwrap().clone();
+    match config::save_sender_config(app, &config::SenderConfig { visible, hotkey }) {
+        Ok(()) => *st.saved_visible.lock().unwrap() = visible,
+        Err(e) => log::warn!("[sender] 保存可见性失败（下个周期重试）: {e}"),
+    }
 }
 
 /// 弹幕窗容器 padding（px）：对应 OverlayApp.vue 的 .overlay-root padding

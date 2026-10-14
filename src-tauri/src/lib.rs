@@ -25,7 +25,7 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-use window::{capture_overlay_bounds, flush_overlay_bounds, sync_sender_docked};
+use window::{capture_overlay_bounds, flush_overlay_bounds, flush_sender_visible, sync_sender_docked};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -154,7 +154,7 @@ pub fn run() {
             } else {
                 log::error!("[overlay] 创建失败");
             }
-            // 周期落盘窗口位置（拖动/缩放中去重保存）
+            // 周期落盘窗口位置与发送框可见性（拖动/缩放/快捷键切换中去重保存）
             let app3 = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut interval =
@@ -162,6 +162,8 @@ pub fn run() {
                 loop {
                     interval.tick().await;
                     flush_overlay_bounds(&app3);
+                    // 快捷键/托盘切换只改内存态，这里去重落盘（避免每按一下写整份 config）
+                    flush_sender_visible(&app3);
                 }
             });
 
@@ -193,6 +195,8 @@ pub fn run() {
                 let st = app.state::<SenderState>();
                 *st.visible.lock().unwrap() = cfg.sender.visible;
                 *st.hotkey.lock().unwrap() = cfg.sender.hotkey.clone();
+                // 刚从配置读出来的值就是「已落盘值」，别让周期任务再写一遍
+                *st.saved_visible.lock().unwrap() = cfg.sender.visible;
             }
             // 启动时没有旧键位要注销，故 old 传空串
             match shortcut::apply_hotkey(app.handle(), "", &cfg.sender.hotkey) {
