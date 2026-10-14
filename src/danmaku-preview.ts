@@ -148,6 +148,16 @@ export function buildPreviewWelcome(): WelcomeEvent[] {
 }
 
 /**
+ * 清掉弹幕窗里的预览行（设置页「清除测试弹幕」按钮）
+ *
+ * 与每次推送前的重置走同一个 `preview-reset` 事件：overlay 收到后只删带预览标记的行，
+ * 真弹幕 / 真礼物 / 真欢迎行不受影响。
+ */
+export async function clearDanmakuPreview(): Promise<void> {
+  await emit('preview-reset')
+}
+
+/**
  * 推一组预览：先 reset 清掉上一组预览行，再逐条发样例。
  *
  * 返回本次推送的行数（供界面提示）。`includeGift` / `includeWelcome` 由调用方按

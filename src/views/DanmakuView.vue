@@ -7,7 +7,7 @@ import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
 import SenderWindowPanel from '../components/SenderWindowPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
 import { useSaveTip } from '../composables/useSaveTip'
-import { emitDanmakuPreview } from '../danmaku-preview'
+import { emitDanmakuPreview, clearDanmakuPreview } from '../danmaku-preview'
 import {
   DEFAULT_DANMAKU_FILTER,
   DEFAULT_OVERLAY_STYLE,
@@ -95,6 +95,17 @@ async function sendPreview() {
   }
 }
 
+/** 清掉弹幕窗里的预览行（真弹幕不受影响） */
+async function clearPreview() {
+  previewHint.value = ''
+  try {
+    await clearDanmakuPreview()
+    previewHint.value = '已清除测试弹幕（真弹幕不受影响）'
+  } catch (e) {
+    previewHint.value = String(e)
+  }
+}
+
 onMounted(async () => {
   try {
     style.value = await invoke<OverlayStyle>('overlay_get_style')
@@ -177,6 +188,26 @@ onMounted(async () => {
           弹幕文字统一白色（黑色描边），任意背景下清晰。 背景不透明度作用于弹幕区与礼物区整块面板：0% = 完全透明，100% =
           纯黑。
         </p>
+
+        <SettingRow label="测试弹幕">
+          <div class="preview-box">
+            <button type="button" class="save-btn" :disabled="previewBusy" @click="sendPreview">
+              {{ previewBusy ? '发送中…' : '发送测试弹幕' }}
+            </button>
+            <button type="button" class="preview-clear" :disabled="previewBusy" @click="clearPreview">
+              清除测试弹幕
+            </button>
+            <span v-if="previewHint" class="preview-hint">{{ previewHint }}</span>
+          </div>
+        </SettingRow>
+
+        <p class="tip">
+          在弹幕窗里按真实渲染路径画一组样例：普通观众 / 房管 / 舰长 / 提督 / 总督 / 荣耀等级 / 本房与其它房粉丝牌 /
+          彩色弹幕 / 长文本换行；礼物区与欢迎信息开启时还会带上礼物、连击更新、醒目留言、上舰与欢迎行。
+          只在本地弹幕窗显示，不会发到直播间；但行是真画上去的，推流时会出现在直播画面里。
+          再点一次会替换上一组，「清除测试弹幕」把预览行全部去掉 —— 两种情况真弹幕一条都不会被删。
+        </p>
+
         <p v-if="savedTip" class="saved">✓ 已应用并保存</p>
       </div>
     </section>
@@ -209,22 +240,6 @@ onMounted(async () => {
             <span class="value">{{ style.outline_width }}px</span>
           </div>
         </SettingRow>
-
-        <SettingRow label="测试弹幕">
-          <div class="preview-box">
-            <button type="button" class="save-btn" :disabled="previewBusy" @click="sendPreview">
-              {{ previewBusy ? '发送中…' : '发送测试弹幕' }}
-            </button>
-            <span v-if="previewHint" class="preview-hint">{{ previewHint }}</span>
-          </div>
-        </SettingRow>
-
-        <p class="tip">
-          在弹幕窗里按真实渲染路径画一组样例：普通观众 / 房管 / 舰长 / 提督 / 总督 / 荣耀等级 / 本房与其它房粉丝牌 /
-          彩色弹幕 / 长文本换行；礼物区与欢迎信息开启时还会带上礼物、连击更新、醒目留言、上舰与欢迎行。
-          只在本地弹幕窗显示，不会发到直播间；但行是真画上去的，推流时会出现在直播画面里。
-          再点一次会替换上一组，真弹幕一条都不会被删。
-        </p>
 
         <p v-if="savedTip" class="saved">✓ 已应用并保存</p>
       </div>
@@ -260,12 +275,33 @@ onMounted(async () => {
   min-width: 150px;
 }
 
-/* 测试弹幕：按钮 + 就地结果提示（提示会带「礼物区已关闭」这类说明，故允许换行） */
+/* 测试弹幕：发送（主按钮，复用全局 .save-btn）+ 清除（次级按钮）+ 就地结果提示 */
 .preview-box {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.preview-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.preview-clear:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.preview-clear:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .preview-hint {
