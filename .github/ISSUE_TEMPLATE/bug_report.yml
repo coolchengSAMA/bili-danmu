@@ -1,0 +1,110 @@
+name: 🐞 Bug 反馈
+description: 报告一个可复现的问题（本仓库是 fork，功能与上游有差异，见下）
+title: '[Bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 **fork**，额外加了几项功能
+        > （发送框可整条隐藏 + 全局快捷键、测试弹幕、弹幕窗左侧边界提示与缩放手柄）。
+        > 如果问题出在**上游原有功能**上，直接提到[上游仓库](https://github.com/bd-dxg/bili-danmu/issues)会更合适；
+        > 出在本 fork 的新功能上，提到这里就行。
+  - type: input
+    id: version
+    attributes:
+      label: 版本与安装来源
+      description: 应用「关于」页能看到版本号；再说清是从哪装 / 编译的
+      placeholder: 例如：1.4.1，从本仓库 Releases 的 v1.4.1-local-1 安装
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 出问题的位置
+      multiple: true
+      options:
+        - 主窗口（设置页）
+        - 弹幕窗
+        - 发送框
+        - 系统托盘
+        - 语音朗读
+        - 其它 / 说不清
+    validations:
+      required: true
+  - type: dropdown
+    id: fork_feature
+    attributes:
+      label: 是否与本 fork 新增的功能有关
+      description: 不确定就选最后一项
+      options:
+        - 发送框可整条隐藏 / 全局快捷键
+        - 测试弹幕（弹幕样式页）
+        - 弹幕窗左侧边界提示 / 缩放手柄
+        - 与本 fork 的改动无关（上游原有功能）
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: 现象与期望
+      description: 做了什么 → 期望是什么 → 实际变成了什么
+      placeholder: |
+        1. 我按了全局快捷键 ...
+        2. 期望发送框出现
+        3. 实际没有任何反应
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 能稳定复现最好；偶发也请写清大概频率
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      description: Windows 版本、屏幕缩放、是否多屏（透明窗口 / 缩放相关的问题请写全）
+      placeholder: 例如：Windows 11 23H2、125% 缩放、双屏
+    validations:
+      required: true
+  - type: dropdown
+    id: state
+    attributes:
+      label: 当时的登录 / 连接状态
+      options:
+        - 已登录且已连接直播间
+        - 已登录、未连接直播间
+        - 未登录（游客态收不到弹幕，属正常现象）
+        - 记不清了
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（可选，但很有用）
+      description: |
+        日志在 `%APPDATA%\com.bilidanmu.app\logs\bili-danmu.log`（按天切分，保留 7 份）。
+        **贴之前请删掉 Cookie / 凭据相关内容。**
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图 / 录屏（可选）
+      description: 直接拖进来即可；弹幕窗是透明窗口，录屏最直观
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我搜过已有 issue，没有重复
+          required: true
+        - label: 日志 / 截图里不含 Cookie、账号凭据等隐私信息
+          required: true

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 上游仓库 bd-dxg/bili-danmu 的 Issues
+    url: https://github.com/bd-dxg/bili-danmu/issues
+    about: 上游原有功能的问题与需求，提到上游更合适（本仓库是 fork，功能有差异）
+  - name: 上游 Releases（官方安装包）
+    url: https://github.com/bd-dxg/bili-danmu/releases/latest
+    about: 装机优先用官方发布；本仓库的本地构建见本仓库 Releases
+  - name: 本仓库的改动清单与安装包
+    url: https://github.com/coolchengSAMA/bili-danmu/releases
+    about: 发送框隐藏 + 全局快捷键、测试弹幕、弹幕窗边界提示等差异功能的说明与下载
