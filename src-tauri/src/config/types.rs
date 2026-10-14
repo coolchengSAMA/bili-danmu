@@ -285,3 +285,17 @@ pub struct ConfigFile {
     pub sender: SenderConfig,
     pub recent_rooms: Vec<RecentRoom>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 旧版 config.json 里没有 `sender` 字段：缺字段必须落到默认值（显示发送框、不注册快捷键），
+    /// 不能让整份配置解析失败——解析失败会退回全默认，用户连登录态一起丢。
+    #[test]
+    fn 旧配置缺sender字段时落默认值() {
+        let cfg: ConfigFile = serde_json::from_str(r#"{"auth":null}"#).unwrap();
+        assert!(cfg.sender.visible);
+        assert!(cfg.sender.hotkey.is_empty());
+    }
+}

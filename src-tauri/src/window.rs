@@ -83,14 +83,17 @@ pub(crate) fn sync_sender_docked(app: &AppHandle) {
 /// 显示 / 隐藏发送框
 ///
 /// 显示时先同步吸附位置再 show：隐藏期间弹幕窗可能被拖动或缩放过，直接 show 会出现在旧位置。
-/// 显示后聚焦窗口并广播 `sender-shown`，发送框前端收到后把光标放进输入框——唤出即可打字。
+/// 显示后**尽力**聚焦窗口并广播 `sender-shown`，发送框前端收到后把光标放进输入框。
+/// 注意这是尽力而为：Windows 的前台窗口切换限制（游戏占前台时）会让 `set_focus` 只闪任务栏，
+/// 此时输入框虽已聚焦，用户仍可能需要点一下窗口才能打字，故失败只记日志、不当作错误返回。
 pub(crate) fn set_sender_visible(app: &AppHandle, visible: bool) -> Result<bool, String> {
     let win = sender_window(app).ok_or("发送框窗口未创建")?;
     if visible {
         sync_sender_docked(app);
         win.show().map_err(|e| format!("显示发送框失败: {e}"))?;
-        let _ = win.set_focus();
-        // 被游戏占着前台时 set_focus 可能只闪任务栏，但输入框自身聚焦仍能让用户直接输入
+        if let Err(e) = win.set_focus() {
+            log::warn!("[sender] 唤出后置焦失败（可能被前台锁挡住，用户需手点一下）: {e}");
+        }
         let _ = app.emit("sender-shown", ());
     } else {
         win.hide().map_err(|e| format!("隐藏发送框失败: {e}"))?;

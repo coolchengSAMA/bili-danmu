@@ -23,18 +23,17 @@ pub(crate) fn parse_hotkey(s: &str) -> Result<Shortcut, String> {
     let mut code: Option<Code> = None;
     for part in s.split('+') {
         let p = part.trim();
-        match p {
-            "Ctrl" | "Control" => mods |= Modifiers::CONTROL,
-            "Alt" => mods |= Modifiers::ALT,
-            "Shift" => mods |= Modifiers::SHIFT,
-            "Meta" | "Super" | "Win" => mods |= Modifiers::SUPER,
-            other => {
+        // 修饰键名大小写不敏感（config.json 可能被手改），键码保持原样交给 Code::from_str
+        match p.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => mods |= Modifiers::CONTROL,
+            "alt" => mods |= Modifiers::ALT,
+            "shift" => mods |= Modifiers::SHIFT,
+            "meta" | "super" | "win" => mods |= Modifiers::SUPER,
+            _ => {
                 if code.is_some() {
                     return Err(format!("只能有一个主键：{s}"));
                 }
-                code = Some(
-                    Code::from_str(other).map_err(|_| format!("无法识别的按键：{other}"))?,
-                );
+                code = Some(Code::from_str(p).map_err(|_| format!("无法识别的按键：{p}"))?);
             }
         }
     }
@@ -55,18 +54,31 @@ pub(crate) fn apply_hotkey(app: &AppHandle, old: &str, new: &str) -> Result<(), 
     if old == new {
         return Ok(());
     }
-    let gs = app.global_shortcut();
-    if !new.is_empty() {
-        let sc = parse_hotkey(new)?;
-        gs.register(sc)
-            .map_err(|e| format!("注册失败（可能已被其它程序占用）：{e}"))?;
-    }
-    if !old.is_empty() {
-        if let Ok(sc) = parse_hotkey(old) {
-            // 旧键位注销失败不影响新键位已生效
-            if let Err(e) = gs.unregister(sc) {
-                log::warn!("[sender] 注销旧快捷键 {old} 失败: {e}");
+    // 比解析后的 Shortcut 而不是字符串：`Ctrl+KeyQ` 与 `Control+KeyQ`、大小写差异
+    // 都是同一个键位，按字符串比会走到 register 撞 AlreadyRegistered 并误报「已被占用」
+    let old_sc = parse_hotkey(old).ok().filter(|_| !old.is_empty());
+    let new_sc = parse_hotkey(new).ok().filter(|_| !new.is_empty());
+    if new.is_empty() {
+        // 只注销
+        if let Some(sc) = old_sc {
+            if let Err(e) = app.global_shortcut().unregister(sc) {
+                log::warn!("[sender] 注销快捷键 {old} 失败: {e}");
             }
+        }
+        return Ok(());
+    }
+    let new_sc = new_sc.ok_or_else(|| format!("无法识别的快捷键：{new}"))?;
+    if old_sc == Some(new_sc) {
+        return Ok(());
+    }
+    let gs = app.global_shortcut();
+    // 事件处理在 lib.rs 注册插件时用 Builder::with_handler 挂上，本函数只负责生命周期
+    gs.register(new_sc)
+        .map_err(|e| format!("注册失败（可能已被其它程序占用）：{e}"))?;
+    if let Some(sc) = old_sc {
+        // 旧键位注销失败不影响新键位已生效
+        if let Err(e) = gs.unregister(sc) {
+            log::warn!("[sender] 注销旧快捷键 {old} 失败: {e}");
         }
     }
     Ok(())
@@ -94,5 +106,38 @@ mod tests {
         assert!(parse_hotkey("Alt+").is_err());
         assert!(parse_hotkey("Alt+KeyQ+KeyW").is_err());
         assert!(parse_hotkey("NotAKey").is_err());
+    }
+
+    /// 与 `SenderWindowPanel.vue` 的 `comboOf()` 约定对齐：修饰键顺序 Ctrl/Alt/Shift/Meta + UI Events 键码。
+    /// 两边各自手写这份约定，所以用字面量把契约钉住——改一侧的写法就会在这里红。
+    #[test]
+    fn 前端产出的组合串都能解析() {
+        for s in [
+            "Ctrl+KeyQ",
+            "Alt+KeyQ",
+            "Shift+Digit1",
+            "Meta+KeyQ",
+            "Ctrl+Shift+Digit1",
+            "F1",
+            "F24",
+        ] {
+            assert!(parse_hotkey(s).is_ok(), "{s} 应能解析");
+        }
+    }
+
+    /// 同一键位的不同写法必须等价：`apply_hotkey` 靠这条避免把「同一键位」当成新键位去
+    /// register，从而误报「可能已被其它程序占用」。修饰键名大小写不敏感；键码仍按
+    /// UI Events 的 code 名精确匹配（`keyq` 不是合法键码，会被拒绝）
+    #[test]
+    fn 同一键位的不同写法等价() {
+        assert_eq!(
+            parse_hotkey("Control+KeyQ").unwrap(),
+            parse_hotkey("Ctrl+KeyQ").unwrap()
+        );
+        assert_eq!(
+            parse_hotkey("alt+KeyQ").unwrap(),
+            parse_hotkey("Alt+KeyQ").unwrap()
+        );
+        assert!(parse_hotkey("Alt+keyq").is_err());
     }
 }

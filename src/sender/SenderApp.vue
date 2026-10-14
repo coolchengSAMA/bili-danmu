@@ -55,7 +55,7 @@ async function sendDanmaku() {
   }
 }
 
-/** 切换鼠标穿透（穿透开启后本按钮是唯一能关掉它的入口） */
+/** 切换鼠标穿透（发送框隐藏时本按钮不可用，此时主界面「弹幕窗」标签 / 托盘仍可关掉穿透） */
 async function toggleClickthrough() {
   try {
     clickthrough.value = await invoke<boolean>('overlay_set_clickthrough', { enabled: !clickthrough.value })
@@ -197,7 +197,7 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.32);
 }
 
-/* 穿透开关：发送框是独立窗口，穿透开启后本按钮仍可点击，是「关掉穿透」的唯一入口 */
+/* 穿透开关：发送框是独立窗口，穿透开启后本按钮仍可点击（发送框整条隐藏时则用主界面「弹幕窗」标签或托盘） */
 .ct-btn {
   flex: 0 0 auto;
   appearance: none;
