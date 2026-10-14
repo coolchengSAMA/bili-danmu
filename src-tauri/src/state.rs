@@ -115,6 +115,12 @@ pub(crate) struct SenderState {
     /// 注册失败不改内存里的键位串、也不落盘，但要能让设置页看见——
     /// 否则「设置里写着 Alt+Q、实际这个键被游戏占了」就是个假象。
     pub(crate) hotkey_error: Mutex<Option<String>>,
+    /// 已落盘的可见性（与 `visible` 不同才写盘，去重靠它）
+    ///
+    /// 快捷键/托盘切换只改内存态，落盘交给周期任务（`window::flush_sender_visible`）：
+    /// 热键回调跑在主线程，而写盘是整份 config 的 load-modify-save + DPAPI 加解密，
+    /// 每按一下写一次会让主线程跟着磁盘走。与 `OverlayState::saved_bounds` 同一套做法。
+    pub(crate) saved_visible: Mutex<bool>,
 }
 
 impl Default for SenderState {
@@ -124,6 +130,7 @@ impl Default for SenderState {
             visible: Mutex::new(cfg.visible),
             hotkey: Mutex::new(cfg.hotkey),
             hotkey_error: Mutex::new(None),
+            saved_visible: Mutex::new(cfg.visible),
         }
     }
 }
