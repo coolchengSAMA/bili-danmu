@@ -102,6 +102,32 @@ impl Default for OverlayState {
     }
 }
 
+/// 发送框状态（可见性 + 当前已注册的全局快捷键）
+///
+/// 与 `OverlayState::visible` 同理：前端启动时就会读可见性，窗口未必已建好，
+/// 故以内存态为准；快捷键串也放这里，供设置页读回与「改了才重注册」比较。
+pub(crate) struct SenderState {
+    pub(crate) visible: Mutex<bool>,
+    /// 已注册的快捷键串（与 config.sender.hotkey 一致；空串 = 未注册）
+    pub(crate) hotkey: Mutex<String>,
+    /// 最近一次注册失败的原因（启动时或改键位时）
+    ///
+    /// 注册失败不改内存里的键位串、也不落盘，但要能让设置页看见——
+    /// 否则「设置里写着 Alt+Q、实际这个键被游戏占了」就是个假象。
+    pub(crate) hotkey_error: Mutex<Option<String>>,
+}
+
+impl Default for SenderState {
+    fn default() -> Self {
+        let cfg = config::SenderConfig::default();
+        Self {
+            visible: Mutex::new(cfg.visible),
+            hotkey: Mutex::new(cfg.hotkey),
+            hotkey_error: Mutex::new(None),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

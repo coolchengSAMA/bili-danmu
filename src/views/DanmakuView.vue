@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
 import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
+import SenderWindowPanel from '../components/SenderWindowPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
 import { useSaveTip } from '../composables/useSaveTip'
 import { DEFAULT_DANMAKU_FILTER, DEFAULT_OVERLAY_STYLE, type DanmakuFilter, type OverlayStyle } from '../types/ipc'
@@ -11,8 +12,8 @@ import { DEFAULT_DANMAKU_FILTER, DEFAULT_OVERLAY_STYLE, type DanmakuFilter, type
 // 初值用共用默认值，挂载后从 Rust 拉真实配置
 const style = ref<OverlayStyle>({ ...DEFAULT_OVERLAY_STYLE })
 
-// 页内标签：style / color / window / filter
-const tab = ref<'style' | 'color' | 'window' | 'filter'>('style')
+// 页内标签：style / color / window / sender / filter
+const tab = ref<'style' | 'color' | 'window' | 'sender' | 'filter'>('style')
 
 // 弹幕过滤配置（应用后 Rust 广播给 Overlay 实时生效并持久化）
 const filter = ref<DanmakuFilter>({ ...DEFAULT_DANMAKU_FILTER })
@@ -72,12 +73,13 @@ onMounted(async () => {
           { key: 'style', label: '弹幕样式' },
           { key: 'color', label: '颜色与描边' },
           { key: 'window', label: '弹幕窗' },
+          { key: 'sender', label: '发送框' },
           { key: 'filter', label: '弹幕过滤' },
         ]"
         :key="t.key"
         class="tab-btn"
         :class="{ active: tab === t.key }"
-        @click="tab = t.key as 'style' | 'color' | 'window' | 'filter'">
+        @click="tab = t.key as 'style' | 'color' | 'window' | 'sender' | 'filter'">
         {{ t.label }}
       </button>
     </div>
@@ -168,6 +170,10 @@ onMounted(async () => {
 
     <section v-show="tab === 'window'" class="tab-pane">
       <OverlayWindowPanel />
+    </section>
+
+    <section v-show="tab === 'sender'" class="tab-pane">
+      <SenderWindowPanel />
     </section>
 
     <section v-show="tab === 'filter'" class="tab-pane">

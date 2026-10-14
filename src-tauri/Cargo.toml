@@ -16,6 +16,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-log = "2"
+# 全局快捷键（发送框显示/隐藏）：应用没焦点时也要能响应，只能走系统级热键。
+# 用 ~2.3 钉住次版本（要求 tauri ^2.6）：2.4 起要求 tauri ^2.12，会把 lock 里的 tauri 顶到
+# 2.12，而 npm 侧 @tauri-apps/api 还是 2.11 —— Tauri CLI 会因「大小版本不一致」拒绝打包。
+tauri-plugin-global-shortcut = "~2.3"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

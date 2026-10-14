@@ -133,6 +133,20 @@ export const DEFAULT_WELCOME_CONFIG: WelcomeConfig = {
   tts_guard: false,
 }
 
+/** 发送框配置（Rust ↔ Vue，事件名 sender-config / sender-visible） */
+export interface SenderConfig {
+  /** 是否显示发送框（隐藏后可用全局快捷键 / 托盘菜单 / 设置页唤出） */
+  visible: boolean
+  /** 显示/隐藏发送框的全局快捷键：`修饰键 + 键码`（如 `Alt+KeyQ`），空串 = 不启用 */
+  hotkey: string
+}
+
+/** 发送框默认配置（与 config/types.rs 的 SenderConfig::default 保持一致） */
+export const DEFAULT_SENDER_CONFIG: SenderConfig = {
+  visible: true,
+  hotkey: 'Alt+KeyQ',
+}
+
 /** Overlay 弹幕样式（Rust ↔ Vue） */
 export interface OverlayStyle {
   font_size: number

@@ -6,6 +6,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { OverlayStyle, RoomStatusEvent } from '../types/ipc'
 
 const danmakuText = ref('')
+// 输入框元素：窗口被快捷键唤出时直接聚焦，做到「唤出即可打字」
+const inputEl = ref<HTMLInputElement | null>(null)
 const sending = ref(false)
 const sendError = ref('')
 const loggedIn = ref(false)
@@ -19,6 +21,8 @@ let unlistenRoom: UnlistenFn | undefined
 let unlistenStyle: UnlistenFn | undefined
 // 穿透从主界面那一侧被改动时由 Rust 广播过来（两个入口必须双向同步）
 let unlistenClickthrough: UnlistenFn | undefined
+// 发送框被快捷键 / 托盘唤出时由 Rust 广播，用于把光标放进输入框
+let unlistenShown: UnlistenFn | undefined
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
 const canSend = computed(() => loggedIn.value && connected.value)
@@ -77,6 +81,10 @@ onMounted(async () => {
   unlistenClickthrough = await listen<boolean>('overlay-clickthrough', e => {
     clickthrough.value = e.payload
   })
+  // 快捷键/托盘唤出：窗口 show 之后再聚焦输入框（窗口隐藏期间前端一直在跑，事件收得到）
+  unlistenShown = await listen('sender-shown', () => {
+    inputEl.value?.focus()
+  })
   try {
     const s = await invoke<OverlayStyle>('overlay_get_style')
     fontSize.value = s.font_size
@@ -92,6 +100,7 @@ onUnmounted(() => {
   unlistenRoom?.()
   unlistenStyle?.()
   unlistenClickthrough?.()
+  unlistenShown?.()
 })
 </script>
 
@@ -99,6 +108,7 @@ onUnmounted(() => {
   <div class="sender-root" :style="{ fontSize: fontSize + 'px' }" @contextmenu.prevent>
     <div class="input-row">
       <input
+        ref="inputEl"
         v-model="danmakuText"
         class="send-input"
         type="text"

@@ -80,6 +80,24 @@ pub(crate) fn sync_sender_docked(app: &AppHandle) {
     let _ = sender.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)));
 }
 
+/// 显示 / 隐藏发送框
+///
+/// 显示时先同步吸附位置再 show：隐藏期间弹幕窗可能被拖动或缩放过，直接 show 会出现在旧位置。
+/// 显示后聚焦窗口并广播 `sender-shown`，发送框前端收到后把光标放进输入框——唤出即可打字。
+pub(crate) fn set_sender_visible(app: &AppHandle, visible: bool) -> Result<bool, String> {
+    let win = sender_window(app).ok_or("发送框窗口未创建")?;
+    if visible {
+        sync_sender_docked(app);
+        win.show().map_err(|e| format!("显示发送框失败: {e}"))?;
+        let _ = win.set_focus();
+        // 被游戏占着前台时 set_focus 可能只闪任务栏，但输入框自身聚焦仍能让用户直接输入
+        let _ = app.emit("sender-shown", ());
+    } else {
+        win.hide().map_err(|e| format!("隐藏发送框失败: {e}"))?;
+    }
+    Ok(visible)
+}
+
 /// 弹幕窗容器 padding（px）：对应 OverlayApp.vue 的 .overlay-root padding
 const OVERLAY_PADDING: f64 = 6.0;
 /// 正文列起点（em）：role-slot 4.8em + 0.7em 间距，对应 OverlayApp.vue 的 --role-indent

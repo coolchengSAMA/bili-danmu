@@ -12,13 +12,14 @@ mod commands;
 mod config;
 mod connection;
 mod gift;
+mod shortcut;
 mod state;
 mod tts;
 mod update;
 mod welcome;
 mod window;
 
-use state::{AppState, OverlayState};
+use state::{AppState, OverlayState, SenderState};
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
@@ -63,6 +64,8 @@ pub fn run() {
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .build()
         })
+        // 全局快捷键：发送框显示/隐藏（注册在 setup 里做，见 shortcut::apply_hotkey）
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState {
             status: Mutex::new(state::RoomStatus::Disconnected),
             cancel: Mutex::new(None),
@@ -70,6 +73,7 @@ pub fn run() {
             danmaku_ticks: Mutex::new(VecDeque::new()),
         })
         .manage(OverlayState::default())
+        .manage(SenderState::default())
         .manage(tts::TtsState::new(config::TtsConfig::default()))
         .manage(gift::GiftState::default())
         .manage(welcome::WelcomeState::default())
@@ -170,6 +174,29 @@ pub fn run() {
             }
             // 创建后立即对齐到弹幕窗下方（覆盖默认位置/尺寸）
             sync_sender_docked(app.handle());
+            // 发送框：按配置恢复可见性（隐藏态默认不显示），并注册全局快捷键。
+            // 快捷键注册失败（被其它程序占用）只记日志，设置页会读回真实状态并提示换键位。
+            {
+                let st = app.state::<SenderState>();
+                *st.visible.lock().unwrap() = cfg.sender.visible;
+                *st.hotkey.lock().unwrap() = cfg.sender.hotkey.clone();
+            }
+            if !cfg.sender.visible {
+                if let Err(e) = window::set_sender_visible(app.handle(), false) {
+                    log::warn!("[sender] 启动时隐藏失败: {e}");
+                }
+            }
+            match shortcut::apply_hotkey(app.handle(), &cfg.sender.hotkey) {
+                Ok(()) if !cfg.sender.hotkey.is_empty() => {
+                    log::info!("[sender] 已注册显示/隐藏快捷键 {}", cfg.sender.hotkey);
+                }
+                Ok(()) => log::info!("[sender] 未设置快捷键（可在设置页录制）"),
+                Err(e) => {
+                    log::warn!("[sender] 快捷键 {e}，可在设置页改一个");
+                    // 让设置页也能看到：避免「配置写着 Alt+Q、实际被占用没注册上」的假象
+                    *app.state::<SenderState>().hotkey_error.lock().unwrap() = Some(e);
+                }
+            }
 
             // 主窗口 × → 最小化到托盘（不退出；由托盘菜单唤出/退出）
             if let Some(main_win) = app.get_webview_window("main") {
@@ -189,8 +216,16 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
                 .map_err(|e| log::error!("[tray] 创建菜单项失败: {e}"))
                 .ok();
+            // 发送框隐藏后，快捷键被游戏占用/被改坏时的兜底入口（托盘左键也能唤出主窗口）
+            let sender_item =
+                MenuItem::with_id(app, "sender", "显示/隐藏发送框", true, None::<&str>)
+                    .map_err(|e| log::error!("[tray] 创建菜单项失败: {e}"))
+                    .ok();
             let mut items: Vec<&dyn tauri::menu::IsMenuItem<_>> = Vec::new();
             if let Some(i) = &show_item {
+                items.push(i);
+            }
+            if let Some(i) = &sender_item {
                 items.push(i);
             }
             if let Some(i) = &quit_item {
@@ -209,6 +244,7 @@ pub fn run() {
                                 let _ = w.set_focus();
                             }
                         }
+                        "sender" => commands::toggle_sender(app),
                         "quit" => {
                             // 先销毁窗口再退出：destroy 绕过主窗 ×→隐藏 拦截，
                             // 让 WebView2 在进程退出前释放 HWND，避免 1412 unregister 竞态
@@ -258,6 +294,11 @@ pub fn run() {
             commands::overlay_get_clickthrough,
             commands::overlay_is_visible,
             commands::overlay_set_always_on_top,
+            commands::sender_get_config,
+            commands::sender_set_config,
+            commands::sender_set_visible,
+            commands::sender_is_visible,
+            commands::sender_hotkey_error,
             commands::get_dashboard_status,
             commands::overlay_get_style,
             commands::overlay_set_style,

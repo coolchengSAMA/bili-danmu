@@ -190,6 +190,14 @@ pub fn save_welcome_config(app: &AppHandle, welcome: &WelcomeConfig) -> Result<(
     save_config_unlocked(app, &cfg)
 }
 
+/// 保存发送框配置（可见性 + 全局快捷键）
+pub fn save_sender_config(app: &AppHandle, sender: &SenderConfig) -> Result<(), String> {
+    let _g = lock_cfg();
+    let mut cfg = load_config_unlocked(app);
+    cfg.sender = sender.clone();
+    save_config_unlocked(app, &cfg)
+}
+
 /// 记录最近连接的直播间：同房间去重后置顶（顺带更新主播名），超出上限截断
 pub fn save_recent_room(app: &AppHandle, room: &RecentRoom) -> Result<(), String> {
     let _g = lock_cfg();

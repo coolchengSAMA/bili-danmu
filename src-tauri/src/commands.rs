@@ -5,9 +5,10 @@
 
 use crate::bilibili;
 use crate::config;
-use crate::state::{prune_ticks, AppState, OverlayState, RoomStatus};
+use crate::shortcut;
+use crate::state::{prune_ticks, AppState, OverlayState, RoomStatus, SenderState};
 use crate::tts;
-use crate::window::{overlay_window, sync_sender_docked};
+use crate::window::{overlay_window, set_sender_visible, sync_sender_docked};
 use serde_json::json;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -64,6 +65,101 @@ pub(crate) fn overlay_get_clickthrough(state: State<'_, OverlayState>) -> bool {
 #[tauri::command]
 pub(crate) fn overlay_is_visible(state: State<'_, OverlayState>) -> bool {
     *state.visible.lock().unwrap()
+}
+
+/// 读取发送框配置（可见性 + 已注册的快捷键）
+#[tauri::command]
+pub(crate) fn sender_get_config(state: State<'_, SenderState>) -> config::SenderConfig {
+    config::SenderConfig {
+        visible: *state.visible.lock().unwrap(),
+        hotkey: state.hotkey.lock().unwrap().clone(),
+    }
+}
+
+/// 设置发送框配置（设置页用）
+///
+/// 顺序有讲究：**先试注册快捷键**，失败就直接返回错误、可见性与配置都不改——
+/// 否则会出现「设置页显示新键位、实际没注册上」的假象。注册成功后才动可见性并落盘。
+#[tauri::command]
+pub(crate) fn sender_set_config(
+    app: AppHandle,
+    state: State<'_, SenderState>,
+    sender: config::SenderConfig,
+) -> Result<config::SenderConfig, String> {
+    let old_hotkey = state.hotkey.lock().unwrap().clone();
+    if sender.hotkey != old_hotkey {
+        shortcut::apply_hotkey(&app, &sender.hotkey)?;
+        *state.hotkey.lock().unwrap() = sender.hotkey.clone();
+        *state.hotkey_error.lock().unwrap() = None;
+    }
+    apply_sender_visible(&app, sender.visible)?;
+    config::save_sender_config(&app, &sender)?;
+    let _ = app.emit("sender-config", &sender);
+    Ok(sender)
+}
+
+/// 显示 / 隐藏发送框（设置页开关与托盘菜单调用；快捷键走内部 `toggle_sender`）
+#[tauri::command]
+pub(crate) fn sender_set_visible(
+    app: AppHandle,
+    state: State<'_, SenderState>,
+    visible: bool,
+) -> Result<bool, String> {
+    let v = apply_sender_visible(&app, visible)?;
+    let hotkey = state.hotkey.lock().unwrap().clone();
+    config::save_sender_config(
+        &app,
+        &config::SenderConfig {
+            visible: v,
+            hotkey,
+        },
+    )?;
+    Ok(v)
+}
+
+/// 查询发送框是否可见（读内存态，理由同 `overlay_is_visible`）
+#[tauri::command]
+pub(crate) fn sender_is_visible(state: State<'_, SenderState>) -> bool {
+    *state.visible.lock().unwrap()
+}
+
+/// 查询上次快捷键注册失败的原因（启动时被占用也走这里；无错返回 None）
+#[tauri::command]
+pub(crate) fn sender_hotkey_error(state: State<'_, SenderState>) -> Option<String> {
+    state.hotkey_error.lock().unwrap().clone()
+}
+
+/// 写内存态 + 广播 + 真正动窗口（命令、快捷键、托盘三处共用）
+fn apply_sender_visible(app: &AppHandle, visible: bool) -> Result<bool, String> {
+    let state = app.state::<SenderState>();
+    if *state.visible.lock().unwrap() == visible {
+        return Ok(visible);
+    }
+    let v = set_sender_visible(app, visible)?;
+    *state.visible.lock().unwrap() = v;
+    let _ = app.emit("sender-visible", v);
+    Ok(v)
+}
+
+/// 翻转发送框可见性（全局快捷键与托盘菜单共用）
+///
+/// 这里不能用 `State<'_, SenderState>`：快捷键回调与托盘事件只拿得到 `AppHandle`。
+pub(crate) fn toggle_sender(app: &AppHandle) {
+    let visible = !*app.state::<SenderState>().visible.lock().unwrap();
+    if let Err(e) = apply_sender_visible(app, visible) {
+        log::warn!("[sender] 切换可见性失败: {e}");
+        return;
+    }
+    let hotkey = app.state::<SenderState>().hotkey.lock().unwrap().clone();
+    if let Err(e) = config::save_sender_config(
+        app,
+        &config::SenderConfig {
+            visible,
+            hotkey,
+        },
+    ) {
+        log::warn!("[sender] 保存可见性失败: {e}");
+    }
 }
 
 /// 开关始终置顶

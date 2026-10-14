@@ -245,6 +245,30 @@ pub struct RecentRoom {
 /// 最近房间保留条数上限
 pub const RECENT_ROOM_LIMIT: usize = 10;
 
+/// 发送框（吸附在弹幕窗下方的独立悬浮小窗）的开关与全局快捷键
+///
+/// 场景：游戏里鼠标扫过发送框会误点（尤其右端的「穿透」按钮），故允许整条隐藏，
+/// 再用全局快捷键唤出回复弹幕。快捷键串格式为「修饰键 + 一个键码」，如 `Alt+KeyQ`：
+/// 键码用 UI Events 的 code 名（`KeyQ` / `Digit1` / `F8` …），空串表示不注册。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SenderConfig {
+    /// 是否显示发送框（隐藏后仍可用快捷键、托盘菜单、设置页唤出）
+    pub visible: bool,
+    /// 显示/隐藏发送框的全局快捷键，空串 = 不启用
+    pub hotkey: String,
+}
+
+impl Default for SenderConfig {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            // Alt+KeyQ：绕开常见游戏用键（F1-F12 / 空格），默认开箱可用且可在设置页改
+            hotkey: "Alt+KeyQ".into(),
+        }
+    }
+}
+
 /// 配置文件结构（后续里程碑扩展字段）
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -257,5 +281,6 @@ pub struct ConfigFile {
     pub gift: GiftConfig,
     pub gift_tts: GiftTtsConfig,
     pub welcome: WelcomeConfig,
+    pub sender: SenderConfig,
     pub recent_rooms: Vec<RecentRoom>,
 }
