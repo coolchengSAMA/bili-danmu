@@ -70,15 +70,44 @@ function comboOf(e: KeyboardEvent): string {
   return parts.join('+')
 }
 
-/** 保存（Rust 会先试注册快捷键，失败则整体不生效并把原因回传） */
+/** 回读 Rust 侧的快捷键注册失败原因；返回「当前是否处于注册失败态」 */
+async function refreshHotkeyError(): Promise<boolean> {
+  try {
+    const e = await invoke<string | null>('sender_hotkey_error')
+    if (e) {
+      showErr(e)
+      return true
+    }
+    return false
+  } catch (e) {
+    console.error('读取快捷键状态失败', e)
+    return false
+  }
+}
+
+/** 保存（Rust 先试注册快捷键，注册失败会整体不生效并把原因回传） */
 async function save(next: SenderConfig) {
   errMsg.value = ''
   try {
     cfg.value = await invoke<SenderConfig>('sender_set_config', { sender: { ...next } })
+    // 保存可能成功、但快捷键仍没注册上（例如键位在启动时就被占用、这次保存的可见性改动照常生效）：
+    // 此时必须显示原因而不是「已保存」，否则用户会以为热键可用
+    if (await refreshHotkeyError()) return
     showSaved()
   } catch (e) {
     showErr(e)
   }
+}
+
+/** 进入 / 退出录制：进出都清一次已按下的修饰键提示，避免显示上一次的残留 */
+function startRecording() {
+  recording.value = true
+  pending.value = ''
+}
+
+function stopRecording() {
+  recording.value = false
+  pending.value = ''
 }
 
 async function onRecordKey(e: KeyboardEvent) {
@@ -86,8 +115,7 @@ async function onRecordKey(e: KeyboardEvent) {
   e.preventDefault()
   e.stopPropagation()
   if (e.code === 'Escape') {
-    recording.value = false
-    pending.value = ''
+    stopRecording()
     return
   }
   if (MODIFIER_CODES.includes(e.code)) {
@@ -95,8 +123,7 @@ async function onRecordKey(e: KeyboardEvent) {
     return
   }
   if (e.code === 'Backspace' || e.code === 'Delete') {
-    recording.value = false
-    pending.value = ''
+    stopRecording()
     await save({ ...cfg.value, hotkey: '' })
     return
   }
@@ -107,8 +134,7 @@ async function onRecordKey(e: KeyboardEvent) {
     errMsg.value = '请至少带一个修饰键（Ctrl / Alt / Shift），或使用 F1-F24'
     return
   }
-  recording.value = false
-  pending.value = ''
+  stopRecording()
   await save({ ...cfg.value, hotkey: comboOf(e) })
 }
 
@@ -122,13 +148,8 @@ onMounted(async () => {
   } catch (e) {
     console.error('读取发送框配置失败', e)
   }
-  try {
-    // 启动时快捷键可能已被游戏/其它程序占用：这里把原因显示出来，别让用户以为设置生效了
-    const e = await invoke<string | null>('sender_hotkey_error')
-    if (e) errMsg.value = e
-  } catch (e) {
-    console.error('读取快捷键状态失败', e)
-  }
+  // 启动时快捷键可能已被游戏/其它程序占用：把原因显示出来，别让用户以为设置生效了
+  await refreshHotkeyError()
 })
 
 onUnmounted(() => {
@@ -156,9 +177,9 @@ onUnmounted(() => {
           type="button"
           class="hotkey-btn"
           :class="{ recording }"
-          @click="recording = true"
+          @click="startRecording"
           @keydown="onRecordKey"
-          @blur="recording = false">
+          @blur="stopRecording">
           {{ recording ? (pending ? pending + ' + …' : '请按下组合键…') : pretty(cfg.hotkey) }}
         </button>
         <button v-if="cfg.hotkey" type="button" class="clear-btn" @click="save({ ...cfg, hotkey: '' })">清除</button>
@@ -173,8 +194,8 @@ onUnmounted(() => {
 
     <p class="tip">
       快捷键默认不设置：全局热键会被系统级占用，其它程序（包括游戏）就收不到这个组合了，
-      所以请自己挑一个不和游戏冲突的键。若提示注册失败，说明该组合已被别的程序占用，换一个即可；
-      想重录现在这一个，先按 Backspace 清除再录（否则那一下会被本应用截走）。
+      所以请自己挑一个不和游戏冲突的键。若提示注册失败，说明该组合已被别的程序占用，换一个即可； 想重录现在这一个，先按
+      Backspace 清除再录（否则那一下会被本应用截走）。
     </p>
 
     <p class="tip">

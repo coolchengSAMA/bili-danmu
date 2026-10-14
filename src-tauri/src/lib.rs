@@ -178,23 +178,21 @@ pub fn run() {
             .always_on_top(true)
             .resizable(false)
             .skip_taskbar(true)
+            // 隐藏态在创建时就带上：否则每次启动都 show→hide 一次，可能闪一帧
+            .visible(cfg.sender.visible)
             .shadow(false);
             if sender_builder.build().is_err() {
                 log::error!("[sender] 创建失败");
             }
             // 创建后立即对齐到弹幕窗下方（覆盖默认位置/尺寸）
             sync_sender_docked(app.handle());
-            // 发送框：按配置恢复可见性（隐藏态默认不显示），并注册全局快捷键。
-            // 快捷键注册失败（被其它程序占用）只记日志，设置页会读回真实状态并提示换键位。
+            // 发送框：把配置写进内存态并注册全局快捷键（窗口可见性在创建时已按配置设好，
+            // 不必再 show→hide 一次）。快捷键注册失败（被其它程序占用）只记日志，
+            // 设置页会读 `sender_hotkey_error` 提示换键位。
             {
                 let st = app.state::<SenderState>();
                 *st.visible.lock().unwrap() = cfg.sender.visible;
                 *st.hotkey.lock().unwrap() = cfg.sender.hotkey.clone();
-            }
-            if !cfg.sender.visible {
-                if let Err(e) = window::set_sender_visible(app.handle(), false) {
-                    log::warn!("[sender] 启动时隐藏失败: {e}");
-                }
             }
             // 启动时没有旧键位要注销，故 old 传空串
             match shortcut::apply_hotkey(app.handle(), "", &cfg.sender.hotkey) {

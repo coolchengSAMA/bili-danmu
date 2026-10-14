@@ -93,7 +93,8 @@ pub(crate) fn sender_set_config(
         *state.hotkey_error.lock().unwrap() = None;
     } else if !sender.hotkey.is_empty() && state.hotkey_error.lock().unwrap().is_some() {
         // 上次没注册上（例如启动时被别的程序占着）：借这次保存再试一次，
-        // 用户可能已经关掉那个程序了。失败也不拦保存，只更新提示。
+        // 用户可能已经关掉那个程序了。失败也不拦保存，只更新 hotkey_error，
+        // 由前端在保存后回读 `sender_hotkey_error` 决定提示「已保存」还是「键位没注册上」。
         match shortcut::apply_hotkey(&app, "", &sender.hotkey) {
             Ok(()) => *state.hotkey_error.lock().unwrap() = None,
             Err(e) => *state.hotkey_error.lock().unwrap() = Some(e),
@@ -101,7 +102,6 @@ pub(crate) fn sender_set_config(
     }
     apply_sender_visible(&app, sender.visible)?;
     config::save_sender_config(&app, &sender)?;
-    let _ = app.emit("sender-config", &sender);
     Ok(sender)
 }
 
