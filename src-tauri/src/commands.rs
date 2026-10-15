@@ -390,7 +390,7 @@ pub(crate) async fn send_danmaku(state: State<'_, AppState>, msg: String) -> Res
     bilibili::send::send_danmaku(&client, &cookies, room_id, msg).await
 }
 
-/// 查询「我的直播间」（主播版主界面优先展示；只需登录态，与当前是否已连接房间无关）
+/// 查询「我的直播间」（streamer 分支主界面优先展示；只需登录态，与当前是否已连接房间无关）
 ///
 /// 接口匿名可调，故**不传登录 Cookie**（少一处凭据外发）：只用登录态里的 uid。
 #[tauri::command]

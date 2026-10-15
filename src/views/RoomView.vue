@@ -13,7 +13,7 @@ onMounted(refreshLogin)
 const { loggedIn, uid, uname, openLoginDialog, logout } = useLogin()
 const { roomId, busy, status, errorMsg, recentRooms, locked, statusText, connect, disconnect } = useRoomConnection()
 
-// ── 主播版：我的直播间（置顶优先展示，一键连自己房间）──
+// ── streamer 分支：我的直播间（置顶优先展示，一键连自己房间）──
 // 数据源 getRoomInfoOld?mid=<uid>：匿名可调，一次给出真实房间号 / 标题 / 开播状态 / 在线人数。
 // 注意靓号主播 uid ≠ 房间号，所以不能拿 uid 当房间号查（上游 room_init 那条路走不通）。
 const myRoom = ref<MyRoomInfo | null>(null)
@@ -61,11 +61,11 @@ onUnmounted(() => {
   if (myRoomTimer !== undefined) window.clearInterval(myRoomTimer)
 })
 
-// ── 主播版：最近连接 / 关注在播 折叠（默认收起，主播更常用的是上面那张卡片）──
+// ── streamer 分支：最近连接 / 关注在播 折叠（默认收起，主播更常用的是上面那张卡片）──
 const recentOpen = ref(false)
 const followingOpen = ref(false)
 
-/// 关注在播改为「展开时才查」：上游是登录即查，而主播版默认用不到它，
+/// 关注在播改为「展开时才查」：上游是登录即查，而streamer 分支默认用不到它，
 /// 白翻最多 10 页关注列表不值当
 async function toggleFollowing() {
   followingOpen.value = !followingOpen.value
@@ -143,7 +143,7 @@ async function handleLogout() {
       </template>
     </div>
 
-    <!-- 主播版：我的直播间（置顶优先展示，一键连自己房间） -->
+    <!-- streamer 分支：我的直播间（置顶优先展示，一键连自己房间） -->
     <div v-if="loggedIn" class="my-room-card" :class="{ live: myRoom?.live_status === 1 }">
       <div class="my-room-info">
         <span class="my-room-label">我的直播间</span>
@@ -189,7 +189,7 @@ async function handleLogout() {
       </button>
     </div>
 
-    <!-- 主播版：最近连接与关注在播都折叠（默认收起，需要时展开） -->
+    <!-- streamer 分支：最近连接与关注在播都折叠（默认收起，需要时展开） -->
     <div v-if="recentRooms.length" class="fold-bar">
       <button class="fold-head" @click="recentOpen = !recentOpen">
         <span class="fold-arrow">{{ recentOpen ? '▾' : '▸' }}</span>
@@ -370,7 +370,7 @@ h2 {
   margin-top: 8px;
 }
 
-/* 主播版：我的直播间卡片（置顶）；左侧竖条在开播时变绿，一眼看出「我是不是在播」 */
+/* streamer 分支：我的直播间卡片（置顶）；左侧竖条在开播时变绿，一眼看出「我是不是在播」 */
 .my-room-card {
   display: flex;
   align-items: center;

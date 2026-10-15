@@ -9,9 +9,14 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 /// GitHub 最新 Release 接口（未认证限流 60 次/小时/IP；只在启动与手动点按时请求，够用）
-const API_LATEST: &str = "https://api.github.com/repos/bd-dxg/bili-danmu/releases/latest";
+///
+/// streamer 分支检查的是**本仓库**的 Release，而不是上游：本版的版本号带 `-streamer.N` 后缀，
+/// 上游的 `vX.Y.Z` 与本版不是同一条版本线（对不齐会一直提示「有新版本」）。
+/// 仓库改名后这里改成新名字即可；GitHub 对被改名仓库的 API 请求会返回 301，
+/// 所以旧名字也能继续工作（reqwest 默认跟随重定向）。
+const API_LATEST: &str = "https://api.github.com/repos/coolchengSAMA/bili-danmu/releases/latest";
 /// 响应缺 html_url 时的兜底地址：发布列表页而非具体 tag，总能打开
-const RELEASES_PAGE: &str = "https://github.com/bd-dxg/bili-danmu/releases";
+const RELEASES_PAGE: &str = "https://github.com/coolchengSAMA/bili-danmu/releases";
 
 #[derive(serde::Serialize)]
 pub(crate) struct UpdateInfo {
@@ -40,7 +45,7 @@ pub(crate) async fn check_update(app: AppHandle) -> Result<UpdateInfo, String> {
 fn build_client(ua_version: &str) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         // GitHub API 强制要求 User-Agent（缺失直接 403），按官方建议带应用名与版本
-        .user_agent(format!("bili-danmu/{ua_version}"))
+        .user_agent(format!("bili-danmu-streamer/{ua_version}"))
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("构建 HTTP 客户端失败: {e}"))
@@ -121,23 +126,37 @@ fn normalize_tag(tag: &str) -> String {
     tag.trim().trim_start_matches(['v', 'V']).to_string()
 }
 
-/// 版本号解析成三段数字
+/// 版本号解析成四段数字：主版本三段 + 「版本修订号」
 ///
-/// 不引 semver 依赖：发布 tag 固定为 `vX.Y.Z`，够用即可。每段取前导数字，
-/// 故 `1.2.0-beta.1` 这类预发布 tag 只比前三段（`-beta` 段记 0）；缺段补 0。
-fn parse_version(v: &str) -> (u64, u64, u64) {
+/// 不引 semver 依赖：版本固定为 `vX.Y.Z`（上游）或 `vX.Y.Z-streamer.N`（streamer 分支，见 `STREAMER.md`）。
+/// 第四段取**预发布段里最后一个数字**：`1.4.1-streamer.2` → `(1,4,1,2)`、`1.4.1` → `(1,4,1,0)`。
+/// 为什么需要这一段：本版的版本号长期停在同一个 `1.4.1` 上，只靠前三段比较时
+/// `-streamer.2` 会被判成与 `-streamer.1` 相等，更新提醒永远不出现；
+/// 而第四段不会破坏与上游的关系——`1.4.2` 仍大于 `1.4.1-streamer.9`。
+fn parse_version(v: &str) -> (u64, u64, u64, u64) {
     let norm = normalize_tag(v);
-    let mut segs = norm.split('.').map(|seg| {
+    let (main, pre) = match norm.split_once('-') {
+        Some((m, p)) => (m, p),
+        None => (norm.as_str(), ""),
+    };
+    let mut segs = main.split('.').map(|seg| {
         seg.chars()
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .parse::<u64>()
             .unwrap_or(0)
     });
+    // 预发布段里最后一个数字：`streamer.2` → 2、`local-1` → 1、`rc` → 0
+    let pre_num = pre
+        .rsplit(|c: char| !c.is_ascii_digit())
+        .find(|s| !s.is_empty())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
     (
         segs.next().unwrap_or(0),
         segs.next().unwrap_or(0),
         segs.next().unwrap_or(0),
+        pre_num,
     )
 }
 
@@ -166,9 +185,22 @@ mod tests {
 
     #[test]
     fn compare_prerelease_by_main_part() {
-        // 预发布 tag 只比前三段：1.2.0-beta 不比 1.2.0 新
-        assert!(!is_newer("1.2.0", "1.2.0-beta.1"));
+        // 主版本更高就是更新（预发布段不影响）
         assert!(is_newer("1.2.0", "1.3.0-beta.1"));
+        // 预发布段没有数字时记 0：`1.3.0-rc` 不比 `1.3.0` 新
+        assert!(!is_newer("1.3.0", "1.3.0-rc"));
+    }
+
+    #[test]
+    fn compare_streamer_revision() {
+        // streamer 分支自己的版本线：`-streamer.N` 必须能递增比较，否则永远提示「已是最新」
+        assert!(is_newer("1.4.1-streamer.1", "v1.4.1-streamer.2"));
+        assert!(!is_newer("1.4.1-streamer.2", "1.4.1-streamer.1"));
+        assert!(!is_newer("1.4.1-streamer.2", "1.4.1-streamer.2"));
+        // 与上游版本线互不干扰：上游发 1.4.2 仍然算更新
+        assert!(is_newer("1.4.1-streamer.9", "1.4.2"));
+        // 早期的 fork tag（`-local-1`）与 `-streamer.1` 同修订号：不提示更新是对的
+        assert!(!is_newer("1.4.1-streamer.1", "v1.4.1-local-1"));
     }
 
     #[test]

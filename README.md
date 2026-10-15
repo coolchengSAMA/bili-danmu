@@ -1,19 +1,19 @@
-<p align="center"><img src="imgs/app-icon.webp" alt="bili-danmu" ></p>
+<p align="center"><img src="imgs/app-icon.webp" alt="bili-danmu-streamer" ></p>
 
-<p align="center" style="font-size:36px; font-weight: bold;"> bili-danmu</p>
+<p align="center" style="font-size:36px; font-weight: bold;"> bili-danmu-streamer</p>
 
-<p align="center">2.9 MB 的安装包，一个不跟游戏抢资源的 B 站弹幕助手</p>
+<p align="center">3 MB 的安装包，一个不跟游戏抢资源的 B 站弹幕助手（自用分支）</p>
 
-> **本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork**，是一个**面向主播的版本**（`streamer` 分支）。与上游的差异见下方「主播版差异」，完整清单与回退方式见 [`STREAMER.md`](./STREAMER.md)；安装包见[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases)。
-> **上游仓库始终是唯一官方源**：装机请优先用[上游 Releases](https://github.com/bd-dxg/bili-danmu/releases/latest)，问题与需求也请优先反馈给上游。
+> **本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork**，主线是**个人自用分支**（`streamer`）：按我自己使用中的体验来改与加功能。与上游的差异见下方「streamer 分支差异」，完整清单与回退方式见 [`STREAMER.md`](./STREAMER.md)；安装包见[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases)。
+> **上游是原始项目**：本版基于上游开发，协议解析 / TTS 等核心能力都来自上游，出处与许可证保留在 [`STREAMER.md`](./STREAMER.md) 与 `LICENSE`。
 
-## 主播版差异
+## streamer 分支差异
 
-面向「边播边看弹幕」的场景，在上游基础上做了这些改动（细节与回退方式见 [`STREAMER.md`](./STREAMER.md)）：
+这些改动都来自我自己的使用体验（在上游基础上），细节与回退方式见 [`STREAMER.md`](./STREAMER.md)）：
 
 | 改了什么 | 为什么 |
 |---|---|
-| **「我的直播间」置顶卡片**：显示自己房间的标题、开播状态、在线人数，一键直连自己房间 | 主播每天连的是同一个房间，这是最高频路径；上游新加的「关注在播」对主播用处不大 |
+| **「我的直播间」置顶卡片**：显示自己房间的标题、开播状态、在线人数，一键直连自己房间 | 我开播时每天连的都是同一个房间，这是最高频路径；上游新加的「关注在播」我基本用不到 |
 | **最近连接 / 关注在播 折叠**（默认收起，展开即用） | 偶尔也要帮别人看弹幕，但不想占着首屏 |
 | **发送框可整条隐藏 + 全局快捷键唤出**（含右端「穿透」按钮） | 游戏里鼠标扫过发送框容易误点，尤其是没有锁定鼠标的射击游戏 |
 | **测试弹幕**：一键在弹幕窗里画一组样例（房管 / 舰长 / 提督 / 总督 / 荣耀等级 / 粉丝牌 / 彩色 / 换行 + 礼物 / 醒目留言 / 上舰 / 欢迎行），可一键清除 | 调样式、改徽章列宽时能立刻看到真实渲染效果 |
@@ -75,7 +75,7 @@
 
 ## 快速开始
 
-> 只想用不想编译：到 [Releases](https://github.com/bd-dxg/bili-danmu/releases/latest) 下载安装包（`bili-danmu_x.y.z_x64-setup.exe`）双击安装即可。
+> 只想用不想编译：到[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases) 下载安装包（`bili-danmu-streamer_x.y.z-streamer.N_x64-setup.exe`）双击安装即可。
 
 1. 扫码登录（**必做**：B 站 2025+ 不向游客推送弹幕，未登录收不到弹幕；登录后还会显示昵称）
 2. 输入直播间号，点「连接」（也可点输入框下方的面包屑直连最近房间）

@@ -3,15 +3,16 @@ import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
-import rewardCode from '../assets/reward-code.webp'
 import { checkUpdate, openUpdatePage, useUpdate } from '../composables/useUpdate'
 
 // 软件版本号：取自 Tauri 包信息（与 src-tauri/Cargo.toml / tauri.conf.json 同源），
 // 不在前端再抄一份；浏览器里跑（pnpm dev 无 Tauri 注入）时拿不到，徽章自行隐藏
 const version = ref('')
 
-// 仓库地址：页面展示短形式，复制到剪贴板的是带协议的规范 URL（浏览器能直接打开）
-const REPO_LABEL = 'github.com/bd-dxg/bili-danmu'
+// 仓库地址：streamer 分支自己的仓库。页面展示短形式，复制到剪贴板的是带协议的规范 URL。
+// 上游仓库地址与原作者的支持入口在这里不再展示（出处与许可仍完整保留在仓库的
+// README / STREAMER.md / LICENSE 里，GPL-3.0 要求的部分不能省）。
+const REPO_LABEL = 'github.com/coolchengSAMA/bili-danmu'
 const REPO_URL = `https://${REPO_LABEL}`
 
 const copied = ref(false)
@@ -55,8 +56,7 @@ const checked = ref(false)
 
 const hasUpdate = computed(() => Boolean(info.value?.has_update))
 
-// 一个按钮走完「检查更新 → 检查中… → 发现新版本 / 已是最新 / 重试」全部状态：
-// 不新增一行（关于页总高已接近内容区上限，见 .reward 注释）
+// 一个按钮走完「检查更新 → 检查中… → 发现新版本 / 已是最新 / 重试」全部状态，不另占一行
 const updateLabel = computed(() => {
   if (checking.value) return '检查中…'
   if (updateError.value) return '重试'
@@ -97,7 +97,7 @@ onUnmounted(() => {
     <h2>
       <span>关于</span>
       <span v-if="version" class="version">v{{ version }}</span>
-      <!-- 更新提醒与版本徽章同行：关于页放不下额外一行（见 .reward 注释） -->
+      <!-- 更新提醒与版本徽章同行：一个按钮承载全部状态，不另占一行 -->
       <button
         class="pill-btn"
         :class="{ 'has-update': hasUpdate }"
@@ -116,8 +116,13 @@ onUnmounted(() => {
     </h2>
 
     <p class="intro">
-      bili-danmu：轻量级 B 站直播弹幕助手。连接直播间，弹幕实时显示在桌面透明悬浮层， 给用 OBS
-      推流的主播和想一起互动的水友一个干净、不挡画面的看弹幕工具。
+      bili-danmu-streamer：轻量级 B 站直播弹幕助手（个人自用分支）。连接直播间，弹幕实时显示在桌面透明悬浮层， 给用 OBS
+      推流的主播一个干净、不挡画面的看弹幕工具。
+    </p>
+
+    <p class="intro">
+      我在上游基础上按自己的使用体验加了：置顶「我的直播间」一键直连、发送框整条隐藏 +
+      全局快捷键、测试弹幕、弹幕窗边界提示与缩放手柄； 差异清单与出处见仓库 README 与 STREAMER.md。
     </p>
 
     <div class="card">
@@ -141,16 +146,6 @@ onUnmounted(() => {
           （认证流程与 WBI 签名对齐的参考实现）
         </li>
       </ul>
-    </div>
-
-    <div class="card support">
-      <div class="support-text">
-        <h3>支持项目</h3>
-        <p>这个项目的功能都是业余时间开发和维护的：跟进 B 站协议改动、修 bug、加新功能。</p>
-        <p>如果它帮你把直播弹幕看得更顺手，可以扫码支持一下，每份心意都是它继续更新的动力。</p>
-        <p class="wx">微信扫码</p>
-      </div>
-      <img class="reward" :src="rewardCode" alt="微信赞赏码" />
     </div>
   </div>
 </template>
@@ -249,52 +244,9 @@ h2 {
   padding-top: 6px;
 }
 
-/* 支持项目：文案在左、赞赏码在右。
-   横向并排而不是上图下文：关于页总高要压在内容区以内（650 高的窗口减去标题栏
-   与 content padding 约 580px），并排时卡片高度只由图决定（220 + 上下 padding）。 */
-.support {
-  display: flex;
-  /* 垂直居中：图 220px 而文案只有三行，顶端对齐时左下角会空一块 */
-  align-items: center;
-  gap: 16px;
-}
-
-.support-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.support p {
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--text-dim);
-}
-
-/* 「微信扫码」单独成行而不是嵌在句子里：oxfmt 会把段落里与文字相间的行内元素
-   拆到单独一行（无论多短都拆），拆出来的换行会被 Vue 渲染成一个可见空格，
-   结果是「可以 微信扫码 支持一下」。单独占一行就没有这个问题。 */
-.wx {
-  margin-top: 4px;
-  font-weight: 700;
-  color: var(--green);
-}
-
-/* 赞赏码：图片自带白底，加圆角描边，深色主题下不会像一块浮白。
-   这个尺寸（加上卡片 padding 共 240px）是看着页面总高定的：
-   关于页 ≈537px，内容区 ≈578px，留约 40px 余量。 */
-.reward {
-  flex-shrink: 0;
-  width: 220px;
-  height: 220px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  object-fit: contain;
-}
-
-/* 页头小胶囊（更新徽章 + 日志按钮）：与版本徽章同行，13px 不撑高 h2 ——
-   关于页总高已接近内容区上限。更新按钮一个按钮承载「检查更新 / 检查中… /
-   发现新版本 / 已是最新 / 重试」五态（见 updateLabel），避免再添一行提示文字。 */
+/* 页头小胶囊（更新徽章 + 日志按钮）：与版本徽章同行，13px 不撑高 h2。更新按钮一个
+   按钮承载「检查更新 / 检查中… / 发现新版本 / 已是最新 / 重试」五态（见 updateLabel），
+   避免再添一行提示文字。 */
 .pill-btn {
   margin-left: 8px;
   padding: 2px 10px;

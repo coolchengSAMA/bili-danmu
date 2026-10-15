@@ -175,7 +175,7 @@ async fn fetch_live_batch(
     Ok(live)
 }
 
-/// 「我的直播间」信息（主播版主界面优先展示）
+/// 「我的直播间」信息（streamer 分支主界面优先展示）
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MyRoomInfo {
     /// 真实房间号（点击直连用）

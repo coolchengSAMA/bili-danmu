@@ -33,7 +33,10 @@ const current = ref<NavKey>('room')
 <template>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand">bili-danmu</div>
+      <div class="brand">
+        bili-danmu
+        <span class="brand-edition">streamer</span>
+      </div>
       <nav>
         <button
           v-for="n in navs"
@@ -78,6 +81,18 @@ const current = ref<NavKey>('room')
   font-size: 17px;
   color: var(--accent);
   border-bottom: 1px solid var(--border);
+  /* 侧边栏窄：品牌名与「streamer」标签排一行，标签小一号才不会被挤到第二行 */
+  white-space: nowrap;
+}
+
+.brand-edition {
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-weight: 400;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  vertical-align: 2px;
 }
 
 nav {

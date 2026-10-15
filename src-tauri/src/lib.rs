@@ -123,7 +123,7 @@ pub fn run() {
                 "overlay",
                 WebviewUrl::App("overlay.html".into()),
             )
-            .title("bili-danmu overlay")
+            .title("bili-danmu-streamer 弹幕窗")
             .inner_size(700.0, 400.0)
             .position(80.0, 80.0)
             .decorations(false)
@@ -173,7 +173,7 @@ pub fn run() {
                 "sender",
                 WebviewUrl::App("sender.html".into()),
             )
-            .title("bili-danmu 发送")
+            .title("bili-danmu-streamer 发送")
             .inner_size(320.0, 80.0)
             .decorations(false)
             .transparent(true)
@@ -247,6 +247,7 @@ pub fn run() {
             if let Ok(menu) = Menu::with_items(app, &items) {
                 let tray = TrayIconBuilder::with_id("main-tray")
                     .icon(app.default_window_icon().expect("default window icon").clone())
+                    .tooltip("bili-danmu-streamer")
                     .menu(&menu)
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id().as_ref() {

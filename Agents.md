@@ -47,18 +47,18 @@
 - 实测：关注列表带现有登录 Cookie 即可，**无需 WBI 签名、无需 buvid3**（Referer 用 live / space 都通）；批量状态接口匿名可调，且**没有直播间的 uid 直接不返回 key**（不是报错），按缺失跳过
 - 未登录时关注列表返回 `code:-101`：命令层直接报错「请先扫码登录」，退出登录时前端清空列表
 - 没有面向关注列表的开播推送长连接，只能轮询批量接口；上游不做后台轮询（手动刷新 + 登录后自动一次）
-- **主播版差异**：整块折叠（默认收起），并改成**展开时才查**——主播日常用不到它，登录即查会白翻最多 10 页关注列表；展开后仍需点「刷新」再查一次
+- **streamer 分支差异**：整块折叠（默认收起），并改成**展开时才查**——我自己日常用不到它，登录即查会白翻最多 10 页关注列表；展开后仍需点「刷新」再查一次
 
-## 主播版（fork 专属，见 `STREAMER.md`）
+## streamer 分支（fork 专属，见 `STREAMER.md`）
 
-本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork，长期分支 `streamer` 面向**主播**场景（天天连自己房间、要避开游戏误点、要判断观众留存）。与上游的差异集中在「默认值与优先级」，代码差异要保持薄、可枚举、可回退：
+本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork，长期分支 `streamer` 是**个人自用分支**——按我自己使用中的体验来改与加功能（天天连自己房间、要避开游戏误点、想判断观众留存）。与上游的差异集中在「默认值与优先级」，代码差异要保持薄、可枚举、可回退：
 
 - **我的直播间（置顶卡片）**：按登录 uid 查自己房间，显示房间号 / 标题 / 开播状态 / 在线人数，右侧「连自己房间」一键直连。数据源 `bilibili/live.rs::fetch_my_room` → `room/v1/Room/getRoomInfoOld?mid=<uid>`（**匿名可调，不传登录 Cookie**，少一处凭据外发）。
   - **坑**：别用 `room_init?id=<uid>` 找自己房间——**靓号主播的 uid ≠ 房间号**（uid `391365058` 的房间是 `25627030`），拿 uid 查会得到 `code=60004 房间不存在`
   - 字段实测是 camelCase（`liveStatus`、`online_hidden`），解析两种写法都兼容；`online_hidden` 为真时界面换成「人数已对观众隐藏」（接口仍给数值）
   - 从未开播过的账号接口不给 `roomid` → 命令返回 `None`，界面提示「这个账号还没有直播间」，**不算错误**
   - 卡片 60s 自动刷新，但**只在窗口可见且已登录时**才发请求（房间页是 v-show 常挂载的，必须自己挡一层，否则后台也一直轮询）
-- **最近连接 / 关注在播 折叠**：上游把「最近连接」硬编码隐藏（`SHOW_RECENT_ROOMS = false`）、「关注在播」直接平铺；主播版两个都做成默认收起的折叠区，展开即用（主播偶尔也要帮别人看弹幕）。
+- **最近连接 / 关注在播 折叠**：上游把「最近连接」硬编码隐藏（`SHOW_RECENT_ROOMS = false`）、「关注在播」直接平铺；streamer 分支两个都做成默认收起的折叠区，展开即用（偶尔也要帮别人看弹幕）。
 - 差异清单、回退方式与「同步上游」的纪律写在 `STREAMER.md`；改这里的行为时要同步更新它。
 
 ## 技术栈
@@ -95,7 +95,7 @@
     - `tts/`：`mod.rs` 队列状态与入口钩子（`on_danmaku` / `on_backing`）、`text.rs` 筛选/清洗/组装文案（弹幕与打赏各一个组装函数）、`gift.rs` 礼物朗读的连击聚合与静默窗口、`worker.rs` 合成与播放流水线、`player.rs` winmm MCI 播放、`edge.rs` Edge TTS 协议、`edge/drm.rs` 的 `Sec-MS-GEC` 令牌生成（v2 自定义哈希）、`edge/voices.rs` 音色表、`edge/ssml.rs` SSML 构造、`edge/util.rs` 时间与编码工具
     - `config.rs` 配置读写与全局互斥、`config/types.rs` 结构体与默认值、`config/crypto.rs` DPAPI 加解密
     - `gift.rs` 礼物列表：金额门槛与连击合并（唯一判定处，前端只负责按 id 覆盖与条数上限）
-    - `update.rs` 版本更新提醒：请求 GitHub Releases 比对版本（只提醒，不下载安装）、ShellExecuteW 打开下载页
+    - `update.rs` 版本更新提醒：请求 GitHub Releases 比对版本（只提醒，不下载安装；**streamer 分支查本仓库的 Release**，版本比较支持 `-streamer.N` 后缀）、ShellExecuteW 打开下载页
 - 多窗口：根目录 `index.html`（主窗口）+ `overlay.html`（透明悬浮窗）+ `sender.html`（发送弹幕框），Tauri 配置见 `src-tauri/tauri.conf.json` 与 `capabilities/default.json`
 - IPC 双向类型约定：Rust command 与 `src/types/ipc.ts` 保持一致，改动协议时两端同步
 - 注释、commit 一律简体中文；PRD（`prd.md`）已停止维护（见下）
@@ -105,6 +105,8 @@
 
 - 禁止在 `main` 上直接开发：功能 / 修复 / 重构一律先切分支（沿用 `feature/` / `fix/` / `refactor/` 前缀，见 `git branch -a`），完成后开 PR、squash 合并回 `main`；只有版本号提升、README / 文档这类发布收尾可直接提交 `main`
 - 版本号要同步改 3 处：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`；`src-tauri/Cargo.lock` 由 `cargo check` / 构建自动更新
+- **本仓库（streamer 分支）的版本线**：版本号形如 `1.4.1-streamer.N`（前三位 = 所基于的上游版本，`N` = 本版发布序号），Release tag 同形（`v1.4.1-streamer.1`）。更新检查（`update.rs`）**查本仓库的 Release**，其版本比较已支持这段后缀（第四段取预发布段里最后一个数字）——否则同一个 `1.4.1` 下 `-streamer.2` 会被判成与 `-streamer.1` 相等，更新提示永远不会出现。
+- **名称**：产品名 `bili-danmu-streamer`（`tauri.conf.json` 的 `productName`：决定安装目录、开始菜单项与安装包文件名），界面显示名「bili-danmu-streamer」（主窗口标题、弹幕窗/发送框标题、托盘提示）。**`identifier` 必须保持 `com.bilidanmu.app`**：配置目录与登录态都挂在它下面，改掉等于换一个应用（要重新扫码登录）。
 - 流程：改版本 → commit（`🚀 应用版本号升至 X.Y.Z（…）`）→ 推 `main` → `pnpm tauri build` → `gh release create`
 - 安装包路径：`src-tauri/target/release/bundle/nsis/bili-danmu_<版本>_x64-setup.exe`
 - 打包前确认应用没在运行，否则 NSIS 写 exe 会失败
