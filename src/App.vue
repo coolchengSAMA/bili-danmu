@@ -75,34 +75,40 @@ const current = ref<NavKey>('room')
   background: var(--bg-side);
 }
 
-/* 品牌区：侧边栏只有 150px（内宽 122px），「bili-danmu + 徽章」一行放不下
-   （17px 品牌名约 95px，徽章再小也塞不进去），所以品牌名一行、徽章另起一行 */
+/* 品牌区：品牌名在左、分支徽章在右，同一行。
+   侧边栏只有 150px（左右 padding 各 11px → 内宽 128px），所以字号都得收紧：
+   14px 的「bili-danmu」约 69px，徽章约 51px，加 4px 间隔共 124px，留 4px 余量。
+   万一字体/缩放下仍超宽：徽章 flex-shrink:0 保持完整，品牌名退化成省略号。 */
 .brand {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-  padding: 14px 14px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 14px 11px;
   border-bottom: 1px solid var(--border);
 }
 
 .brand-name {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.2;
   color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 分支徽章：胶囊小卡片（柔和底色 + 对比色文字），比描边方框更像版本标签 */
+/* 分支徽章：与「未开播」等状态徽章同一套视觉（1px 描边 + 4px 圆角 + 弱化文字色） */
 .brand-edition {
-  padding: 1px 7px 2px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.6;
-  letter-spacing: 0.5px;
-  color: var(--accent-strong-text);
-  background: var(--accent-soft);
-  border-radius: 999px;
+  flex-shrink: 0;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.8;
+  letter-spacing: 0.2px;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 nav {
