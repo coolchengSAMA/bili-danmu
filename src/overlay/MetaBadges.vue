@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import GuardChip from './GuardChip.vue'
+
 import type { OverlayStyle } from '../types/ipc'
 
 // 弹幕行 / 礼物行共用的身份徽章区：身份前缀（房管 / 舰长）+ 荣耀等级 + 粉丝牌。
@@ -20,21 +22,15 @@ const props = defineProps<{
 }>()
 
 /** 身份前缀列表（可叠加）：房管 + 舰长/提督/总督，按展示顺序 */
-function rolesOf(): { label: string; cls: string }[] {
-  const roles: { label: string; cls: string }[] = []
+function rolesOf(): { kind: 'admin' | 'guard'; label: string; cls: string; level: number }[] {
+  const roles: { kind: 'admin' | 'guard'; label: string; cls: string; level: number }[] = []
   if (props.isAdmin) {
-    roles.push({ label: '房管', cls: 'admin' })
+    roles.push({ kind: 'admin', label: '房管', cls: 'admin', level: 0 })
   }
-  const g = props.guardLevel
-  if (g && g >= 1) {
-    // 舰队等级：3=舰长（蓝） 2=提督（紫） 1=总督（金红），三档配色区分
-    const guard =
-      g === 3
-        ? { label: '舰长', cls: 'guard-captain' }
-        : g === 2
-          ? { label: '提督', cls: 'guard-admiral' }
-          : { label: '总督', cls: 'guard-governor' }
-    roles.push(guard)
+  const g = props.guardLevel ?? 0
+  if (g >= 1 && g <= 3) {
+    // 文案与三档配色统一由 GuardChip 提供（弹幕窗右侧在线榜也用它，两处不能各写一份）
+    roles.push({ kind: 'guard', label: '', cls: 'guard', level: g })
   }
   return roles
 }
@@ -46,9 +42,10 @@ function rolesOf(): { label: string; cls: string }[] {
     <!-- 身份前缀列（固定宽度，无前缀留空）→ LV/粉丝牌/文字各行垂直对齐 -->
     <span class="role-slot">
       <template v-if="overlayStyle.show_role">
-        <span v-for="r in rolesOf()" :key="r.cls" class="chip role" :class="r.cls">
-          {{ r.label }}
-        </span>
+        <template v-for="r in rolesOf()" :key="r.cls">
+          <GuardChip v-if="r.kind === 'guard'" :level="r.level" />
+          <span v-else class="chip role" :class="r.cls">{{ r.label }}</span>
+        </template>
       </template>
     </span>
     <template v-if="overlayStyle.show_wealth && wealthLevel && wealthLevel > 0">
@@ -142,21 +139,6 @@ function rolesOf(): { label: string; cls: string }[] {
 .chip.role {
   min-width: 2.6ch;
   color: #fff;
-}
-
-/* 舰长：蓝色（比房管蓝略深，避免与「房」混淆） */
-.chip.role.guard-captain {
-  background: linear-gradient(180deg, #4facfe, #1f6fd0);
-}
-
-/* 提督：紫色（比本房粉丝牌紫更艳） */
-.chip.role.guard-admiral {
-  background: linear-gradient(180deg, #c084fc, #7e22ce);
-}
-
-/* 总督：金渐变红（最高档） */
-.chip.role.guard-governor {
-  background: linear-gradient(180deg, #ffcc4d, #e4413a);
 }
 
 /* 房管：青绿色 teal（与舰长蓝拉开区分） */

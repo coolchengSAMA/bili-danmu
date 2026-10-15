@@ -1,6 +1,7 @@
 //! B 站直播弹幕连接模块
 
 pub mod api;
+pub mod audience;
 pub mod event;
 pub mod live;
 pub mod login;

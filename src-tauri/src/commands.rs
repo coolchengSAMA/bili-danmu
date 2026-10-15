@@ -202,6 +202,38 @@ pub(crate) fn overlay_set_style(
     Ok(())
 }
 
+/// 读取「在线人数 + 实时在线榜」的最近一次快照
+///
+/// 弹幕窗挂载时读一次（此前已经拉过就立刻有数），之后靠 `audience-update` 事件更新。
+#[tauri::command]
+pub(crate) fn audience_get(
+    state: State<'_, crate::state::AudienceState>,
+) -> Option<bilibili::audience::AudienceSnapshot> {
+    state.snapshot.lock().unwrap().clone()
+}
+
+/// 切换弹幕窗右侧在线列的显示（「在看 N 人」与「实时在线榜」两个开关，互相独立）
+///
+/// 走整份 style 的 load-modify-save，而不是让设置页提交整个 style 对象：设置页与其它页面
+/// 各持一份副本时，后保存的会把前一个页面的改动一起覆盖掉。
+#[tauri::command]
+pub(crate) fn overlay_set_audience(
+    app: AppHandle,
+    state: State<'_, OverlayState>,
+    show_online: bool,
+    show_rank: bool,
+) -> Result<(), String> {
+    let mut style = state.style.lock().unwrap().clone();
+    style.show_online = show_online;
+    style.show_rank = show_rank;
+    *state.style.lock().unwrap() = style.clone();
+    let _ = app.emit("overlay-style", &style);
+    config::save_overlay_style(&app, &style)?;
+    // 右侧列出现/消失会改变面板宽度，发送框要跟着重新对齐
+    sync_sender_docked(&app);
+    Ok(())
+}
+
 /// 读取当前弹幕过滤配置
 #[tauri::command]
 pub(crate) fn danmaku_get_filter(state: State<'_, OverlayState>) -> config::DanmakuFilter {

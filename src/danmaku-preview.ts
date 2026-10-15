@@ -11,7 +11,7 @@
 //     清掉上一组预览行，**只清带标记的行，真弹幕一条不动**（id 也带 `preview-` 前缀，不会撞）。
 import { emit } from '@tauri-apps/api/event'
 
-import type { BackingEvent, DanmakuEvent, WelcomeEvent } from './types/ipc'
+import type { AudienceSnapshot, BackingEvent, DanmakuEvent, WelcomeEvent } from './types/ipc'
 
 /** 逐条推送的间隔（ms）：与真实弹幕一样逐条滚入，入场动画才会逐行播 */
 const STEP_MS = 200
@@ -148,10 +148,31 @@ export function buildPreviewWelcome(): WelcomeEvent[] {
 }
 
 /**
+ * 一组预览用的「在线人数 + 实时在线榜」
+ *
+ * 覆盖右侧列的边界情况：超长昵称（测折行）、无舰长牌、三档舰队徽章齐全。
+ * 数字用一个真实数据几乎不会撞上的值（123），清除预览后立刻回落到真实快照。
+ */
+export function buildPreviewAudience(): AudienceSnapshot {
+  return {
+    online_num: 123,
+    online_text: '123',
+    preview: true,
+    users: [
+      { uid: 101, name: '测试舰长', score: 1380, guard_level: 3 },
+      { uid: 102, name: '测试提督', score: 842, guard_level: 2 },
+      { uid: 103, name: '测试总督', score: 5200, guard_level: 1 },
+      { uid: 104, name: '没有舰长牌的观众', score: 260, guard_level: 0 },
+      { uid: 105, name: '一个特别特别长的昵称用来测试折行', score: 82, guard_level: 0 },
+    ],
+  }
+}
+
+/**
  * 清掉弹幕窗里的预览行（设置页「清除测试弹幕」按钮）
  *
  * 与每次推送前的重置走同一个 `preview-reset` 事件：overlay 收到后只删带预览标记的行，
- * 真弹幕 / 真礼物 / 真欢迎行不受影响。
+ * 真弹幕 / 真礼物 / 真欢迎行不受影响；右侧在线列也会从预览快照回落到真实快照。
  */
 export async function clearDanmakuPreview(): Promise<void> {
   await emit('preview-reset')
@@ -162,6 +183,7 @@ export async function clearDanmakuPreview(): Promise<void> {
  *
  * 返回本次推送的行数（供界面提示）。`includeGift` / `includeWelcome` 由调用方按
  * 礼物区、欢迎信息的开关决定——预览不绕过样式开关，只在界面说明哪部分被跳过。
+ * 「在看人数 / 实时在线榜」与这两个开关无关，但只有对应开关打开时才看得见（右侧列整列收起）。
  */
 export async function emitDanmakuPreview(opt: {
   roomId: number
@@ -179,6 +201,8 @@ export async function emitDanmakuPreview(opt: {
   if (opt.includeWelcome) {
     rows.push(...buildPreviewWelcome().map(payload => ({ name: 'welcome', payload })))
   }
+  // 在线列最后发：它是"一眼扫过"的信息，放在弹幕滚完之后出现，不会被挡住
+  rows.push({ name: 'audience-update', payload: buildPreviewAudience() })
   for (const row of rows) {
     await emit(row.name, row.payload)
     await new Promise(r => setTimeout(r, STEP_MS))

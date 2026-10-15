@@ -84,6 +84,7 @@ pub fn run() {
         })
         .manage(OverlayState::default())
         .manage(SenderState::default())
+        .manage(state::AudienceState::default())
         .manage(tts::TtsState::new(config::TtsConfig::default()))
         .manage(gift::GiftState::default())
         .manage(welcome::WelcomeState::default())
@@ -155,15 +156,24 @@ pub fn run() {
                 log::error!("[overlay] 创建失败");
             }
             // 周期落盘窗口位置与发送框可见性（拖动/缩放/快捷键切换中去重保存）
+            // + 每 30 秒拉一次在线人数 / 实时在线榜（2s × 15；换房后立刻拉一次）
             let app3 = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut interval =
                     tokio::time::interval(std::time::Duration::from_secs(2));
+                let mut ticks: u64 = 0;
                 loop {
                     interval.tick().await;
                     flush_overlay_bounds(&app3);
                     // 快捷键/托盘切换只改内存态，这里去重落盘（避免每按一下写整份 config）
                     flush_sender_visible(&app3);
+                    ticks += 1;
+                    if ticks % AUDIENCE_EVERY_TICKS == 0 || audience_room_changed(&app3) {
+                        let app_aud = app3.clone();
+                        tauri::async_runtime::spawn(async move {
+                            poll_audience(&app_aud).await;
+                        });
+                    }
                 }
             });
 
@@ -330,6 +340,8 @@ pub fn run() {
             commands::get_recent_rooms,
             commands::my_room_info,
             commands::list_following_live,
+            commands::audience_get,
+            commands::overlay_set_audience,
             commands::overlay_get_size,
             commands::overlay_set_size,
             update::check_update,
@@ -345,4 +357,100 @@ pub fn run() {
             flush_overlay_bounds(handle);
         }
     });
+}
+
+/// 在线人数 / 实时在线榜的拉取节奏：2 秒 tick × 15 = 30 秒
+const AUDIENCE_EVERY_TICKS: u64 = 15;
+/// 失败后最短重试间隔（秒）：接口偶发风控时不要把 2 秒 tick 变成每 2 秒一次的请求
+const AUDIENCE_RETRY_MIN_SECS: u64 = 5;
+
+/// 在线人数 / 实时在线榜的拉取周期（秒）
+const AUDIENCE_POLL_SECS: u64 = 30;
+
+/// 是否需要立刻拉一次（连接上/换房后不等 30 秒）
+///
+/// 判据是「当前连接房间」与「上次尝试的房间」不同；失败时限速重试，
+/// 否则接口一直失败就会变成每 2 秒打一次。
+fn audience_room_changed(app: &tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    let room = {
+        let st = app.state::<AppState>();
+        // 先把状态值拷出来（RoomStatus 是 Copy），否则 match 会借到已释放的 MutexGuard
+        let status = *st.status.lock().unwrap();
+        match status {
+            state::RoomStatus::Connected { room_id } => room_id,
+            state::RoomStatus::Connecting { .. } | state::RoomStatus::Disconnected => return false,
+        }
+    };
+    let aud = app.state::<state::AudienceState>();
+    let now = std::time::Instant::now();
+    // 距上次成功不足一个周期就不拉（正常节奏由 ticks 计数负责）
+    let last_ok = *aud.last_ok.lock().unwrap();
+    if let Some(ok) = last_ok {
+        if now.duration_since(ok).as_secs() < AUDIENCE_POLL_SECS {
+            return false;
+        }
+    }
+    // 同样是先把值拷出来：match 的临时 MutexGuard 会活到函数末尾，届时 aud 已释放
+    let last_try = *aud.last_try.lock().unwrap();
+    match last_try {
+        Some((r, t)) if r == room => now.duration_since(t).as_secs() >= AUDIENCE_RETRY_MIN_SECS,
+        _ => true,
+    }
+}
+
+/// 拉一次「在线人数 + 实时在线榜」：成功后写内存态并广播 `audience-update`
+///
+/// 失败只记日志（下轮重试）：这是弹幕窗角落的一个数字，不值得弹提示、更不能刷屏。
+async fn poll_audience(app: &tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+    let room_id = {
+        let st = app.state::<AppState>();
+        let status = *st.status.lock().unwrap();
+        match status {
+            state::RoomStatus::Connected { room_id } => room_id,
+            _ => return,
+        }
+    };
+    {
+        let aud = app.state::<state::AudienceState>();
+        *aud.last_try.lock().unwrap() = Some((room_id, std::time::Instant::now()));
+    }
+
+    let client = bilibili::api::http_client();
+    // 主播 uid：按房间缓存（榜单接口要 ruid，room_init 只在换房时调一次）
+    let cached_uid = {
+        let aud = app.state::<state::AudienceState>();
+        let anchor = *aud.anchor.lock().unwrap();
+        match anchor {
+            Some((r, u)) if r == room_id => Some(u),
+            _ => None,
+        }
+    };
+    let anchor_uid = match cached_uid {
+        Some(u) => u,
+        None => match bilibili::audience::fetch_anchor_uid(&client, room_id).await {
+            Ok(u) => {
+                let aud = app.state::<state::AudienceState>();
+                *aud.anchor.lock().unwrap() = Some((room_id, u));
+                u
+            }
+            Err(e) => {
+                log::warn!("[audience] 解析主播 uid 失败（下轮重试）: {e}");
+                return;
+            }
+        },
+    };
+
+    match bilibili::audience::fetch_audience(&client, room_id, anchor_uid).await {
+        Ok(snapshot) => {
+            {
+                let aud = app.state::<state::AudienceState>();
+                *aud.snapshot.lock().unwrap() = Some(snapshot.clone());
+                *aud.last_ok.lock().unwrap() = Some(std::time::Instant::now());
+            }
+            let _ = app.emit("audience-update", &snapshot);
+        }
+        Err(e) => log::warn!("[audience] 拉取在线人数/在线榜失败（下轮重试）: {e}"),
+    }
 }

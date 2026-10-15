@@ -14,6 +14,8 @@ const winSize = ref({ width: 480, height: 240 })
 // 三个开关的初值与 Rust 侧 OverlayState 的默认值一致（创建窗口时就是这三态），
 // 避免读到真实状态前先闪一下错误勾选；挂载后再用命令读一次对齐
 const ov = ref({ visible: true, clickthrough: false, alwaysOnTop: true })
+// 右侧在线列的两个显示开关（默认开，与 config/types.rs 的 OverlayStyle::default 一致）
+const online = ref({ showOnline: true, showRank: true })
 const errMsg = ref('')
 let errTimer: ReturnType<typeof setTimeout> | undefined
 // 窗口被手动拖动边缘缩放时由 Rust 广播 overlay-size 同步过来
@@ -72,6 +74,26 @@ async function commitSize() {
   }
 }
 
+/**
+ * 切换右侧在线列的显示
+ *
+ * 只提交这两个字段（Rust 侧做 load-modify-save），不提交整份样式：
+ * 否则会把「弹幕样式」页正在改的其它字段一起覆盖掉。
+ */
+async function setAudience(patch: Partial<{ showOnline: boolean; showRank: boolean }>) {
+  errMsg.value = ''
+  const next = { ...online.value, ...patch }
+  try {
+    await invoke('overlay_set_audience', {
+      showOnline: next.showOnline,
+      showRank: next.showRank,
+    })
+    online.value = next
+  } catch (e) {
+    fail(e)
+  }
+}
+
 onMounted(async () => {
   // 先在监听：读取尺寸与手动缩放都走同一条路，不必区分先后
   unlistenSize = await listen<{ width: number; height: number }>('overlay-size', e => {
@@ -93,6 +115,13 @@ onMounted(async () => {
     ov.value.clickthrough = await invoke<boolean>('overlay_get_clickthrough')
   } catch (e) {
     console.error('读取弹幕窗状态失败', e)
+  }
+  // 右侧在线列的两个开关存在 OverlayStyle 里，读一次对齐（与「弹幕样式」页共用同一份配置）
+  try {
+    const st = await invoke<{ show_online: boolean; show_rank: boolean }>('overlay_get_style')
+    online.value = { showOnline: st.show_online, showRank: st.show_rank }
+  } catch (e) {
+    console.error('读取弹幕样式失败', e)
   }
 })
 
@@ -145,6 +174,27 @@ onUnmounted(() => {
         <span class="value">{{ winSize.height }}px</span>
       </div>
     </SettingRow>
+
+    <SettingRow label="显示在看人数">
+      <input
+        type="checkbox"
+        class="switch"
+        :checked="online.showOnline"
+        @change="setAudience({ showOnline: ($event.target as HTMLInputElement).checked })" />
+    </SettingRow>
+
+    <SettingRow label="显示实时在线榜">
+      <input
+        type="checkbox"
+        class="switch"
+        :checked="online.showRank"
+        @change="setAudience({ showRank: ($event.target as HTMLInputElement).checked })" />
+    </SettingRow>
+
+    <p class="tip">
+      「在看 N 人」与「实时在线榜（前 5）」显示在弹幕窗右侧那一列，每 30 秒刷新一次； 榜单只统计今天在房间里互动过（投喂
+      / 点赞 / 弹幕）的观众，潜水观众不在榜上。 两个开关都关掉时右列整列收起，弹幕区恢复原宽。
+    </p>
 
     <p class="tip">
       关闭穿透后，可在弹幕窗上按住拖动、边缘调整大小；开启穿透后鼠标点击会落到弹幕窗下方的窗口。

@@ -134,16 +134,29 @@ const SENDER_WIDTH_RATIO: f64 = 0.5;
 /// 按逻辑 px 定义、使用时乘 scale 换算成物理 px，高 DPI 下显示宽度与 100% 缩放一致
 const SENDER_MAX_WIDTH: f64 = 260.0;
 
+/// 弹幕窗右侧在线列的宽度（em）：与 OverlayApp.vue 的 `--audience-indent` 必须一致
+const AUDIENCE_INDENT_EM: f64 = 6.5;
+
 /// 发送框相对弹幕窗的左缩进 / 宽度 / 高度（物理 px），随弹幕字号缩放。
 /// 缩进 = 容器 padding + 面板左边缘（--panel-inset = --role-indent − 0.35em），
-/// 落在面板背景左边缘那条线上；宽度 = 面板宽度（弹幕窗宽 − 左缩进 − 右侧 padding）的 50%，
-/// 且不超过 SENDER_MAX_WIDTH（逻辑 px）。
-/// 改 OverlayApp.vue 的 --role-indent / --panel-inset / 容器 padding 时要同步改这里。
+/// 落在面板背景左边缘那条线上；宽度 = 面板宽度（弹幕窗宽 − 左缩进 − 右侧 padding
+/// − 右侧在线列留白）的 50%，且不超过 SENDER_MAX_WIDTH（逻辑 px）。
+/// 改 OverlayApp.vue 的 --role-indent / --panel-inset / --audience-indent / 容器 padding
+/// 时要同步改这里。
 fn sender_layout_metrics(app: &AppHandle, scale: f64, overlay_width: u32) -> (u32, u32, u32) {
-    let font_size = app.state::<OverlayState>().style.lock().unwrap().font_size;
+    // 先把 State 绑到变量上：直接 `app.state::<..>().style.lock()` 会让临时 State 提前释放
+    let overlay = app.state::<OverlayState>();
+    let style = overlay.style.lock().unwrap();
+    let font_size = style.font_size;
+    // 右侧在线列（在看人数 / 实时在线榜）显示时，面板右边缘还要再让出一条留白
+    let audience_inset = if style.show_online || style.show_rank {
+        (AUDIENCE_INDENT_EM - PANEL_INSET_EM) * font_size * scale
+    } else {
+        0.0
+    };
     // 面板宽度用未取整的浮点算：缩进先取整会把那半个像素的误差带进宽度
     let left = (OVERLAY_PADDING + (ROLE_INDENT_EM - PANEL_INSET_EM) * font_size) * scale;
-    let panel_width = overlay_width as f64 - left - OVERLAY_PADDING * scale;
+    let panel_width = overlay_width as f64 - left - audience_inset - OVERLAY_PADDING * scale;
     let indent = left.round() as u32;
     let w = ((panel_width * SENDER_WIDTH_RATIO)
         .min(SENDER_MAX_WIDTH * scale)

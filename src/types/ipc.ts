@@ -176,6 +176,10 @@ export interface OverlayStyle {
   row_gap: number
   /** 弹幕区 / 礼物区的背景不透明度（0-100，0 = 完全透明，100 = 纯黑） */
   bg_opacity: number
+  /** 弹幕窗右侧那一列是否显示「在看 N 人」 */
+  show_online: boolean
+  /** 弹幕窗右侧那一列是否显示「实时在线榜」（前 5 名） */
+  show_rank: boolean
 }
 
 /** Overlay 弹幕样式默认值（与 config/types.rs 的 OverlayStyle::default 保持一致） */
@@ -193,6 +197,34 @@ export const DEFAULT_OVERLAY_STYLE: OverlayStyle = {
   outline_width: 2,
   row_gap: 0,
   bg_opacity: 35,
+  show_online: true,
+  show_rank: true,
+}
+
+/** 实时在线榜上的一位观众（前 5 名） */
+export interface AudienceUser {
+  uid: number
+  /** 昵称（B 站可能给空串） */
+  name: string
+  /** 贡献值（当日累计） */
+  score: number
+  /** 大航海：0 无 / 1 总督 / 2 提督 / 3 舰长 */
+  guard_level: number
+}
+
+/**
+ * 「在看 N 人 + 实时在线榜」快照
+ *
+ * 口径（实测）：榜单 = 此刻在房间里 ∩ 今天有贡献值的人，人一离开 ≤20 秒就掉榜；
+ * 潜水观众不在榜上（B 站隐私边界）。
+ */
+export interface AudienceSnapshot {
+  online_num: number
+  /** 展示文本（热度房 B 站给的是 `9999+`） */
+  online_text: string
+  users: AudienceUser[]
+  /** true = 这组是「发送测试弹幕」推的预览数据，清除预览后回落到真实快照 */
+  preview?: boolean
 }
 
 /** connect_room 返回值 */

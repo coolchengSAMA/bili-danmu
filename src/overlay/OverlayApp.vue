@@ -8,6 +8,7 @@ import {
   DEFAULT_DANMAKU_FILTER,
   DEFAULT_GIFT_CONFIG,
   DEFAULT_OVERLAY_STYLE,
+  type AudienceSnapshot,
   type BackingEvent,
   type DanmakuEvent,
   type DanmakuFilter,
@@ -18,6 +19,7 @@ import {
   type WelcomeConfig,
   type WelcomeEvent,
 } from '../types/ipc'
+import AudienceColumn from './AudienceColumn.vue'
 import DanmakuRow from './DanmakuRow.vue'
 import GiftRow from './GiftRow.vue'
 
@@ -32,6 +34,25 @@ const connState = ref<'disconnected' | 'connected'>('disconnected')
 const filter = ref<DanmakuFilter>({ ...DEFAULT_DANMAKU_FILTER })
 // 弹幕样式（字号/字体/是否用原色）；初值用共用默认值，挂载后从 Rust 拉真实配置
 const style = ref<OverlayStyle>({ ...DEFAULT_OVERLAY_STYLE })
+// 「在看 N 人 + 实时在线榜」：Rust 每 30 秒推一次 `audience-update`
+const audience = ref<AudienceSnapshot | null>(null)
+// 「发送测试弹幕」推的预览快照：有它就盖住真实数据，清除预览后自动回落到真实值
+const audiencePreview = ref<AudienceSnapshot | null>(null)
+const shownAudience = computed(() => audiencePreview.value ?? audience.value)
+
+/**
+ * 右侧在线列是否占位（决定面板右留白）
+ *
+ * 三种情况都要让列出现：
+ * - 有预览快照：没连接也要能看（「发送测试弹幕」的用途就是不上播也能验证样式）
+ * - 已连接但数据还没到：先占位，否则数字一到面板宽度会跳一下
+ * - 未连接且只剩旧的真实快照：不显示（那是上一场的数字，留着会误导）
+ */
+const audienceOn = computed(() => {
+  if (!(style.value.show_online || style.value.show_rank)) return false
+  if (audiencePreview.value !== null) return true
+  return connState.value === 'connected'
+})
 
 // 弹幕区 / 礼物区共用的半透明黑（背景不透明度 0-100 → alpha 0-1）
 const bgColor = computed(() => `rgba(0, 0, 0, ${(style.value.bg_opacity / 100).toFixed(2)})`)
@@ -216,6 +237,8 @@ let unlistenWelcome: UnlistenFn | undefined
 let unlistenWelcomeCfg: UnlistenFn | undefined
 // 设置页再点「发送测试弹幕」时先清上一组预览行（只清带 preview 标记的）
 let unlistenPreviewReset: UnlistenFn | undefined
+// 在线人数 / 实时在线榜（Rust 每 30 秒推一次）
+let unlistenAudience: UnlistenFn | undefined
 
 /// 弹幕过滤判定：
 /// 身份规则（舰长/房管、有粉丝牌、荣耀等级）为「或」关系——任一开启的规则命中即显示；
@@ -243,6 +266,17 @@ async function startResizeWest(e: MouseEvent) {
     await getCurrentWindow().startResizeDragging('West')
   } catch (err) {
     console.error('从面板左边缘缩放失败', err)
+  }
+}
+
+/** 从窗口右缘拖拽缩放（弹幕窗右侧现在是「在线列」，没有可见的面板边缘可抓，
+ *  所以手柄放在窗口右缘——系统热区只有 3px，这里放宽到 9px 更好抓） */
+async function startResizeEast(e: MouseEvent) {
+  e.preventDefault()
+  try {
+    await getCurrentWindow().startResizeDragging('East')
+  } catch (err) {
+    console.error('从窗口右缘缩放失败', err)
   }
 }
 
@@ -277,6 +311,16 @@ onMounted(async () => {
   // 测试弹幕：每次推送新一组前先清掉上一组预览行（真弹幕不受影响）
   unlistenPreviewReset = await listen('preview-reset', () => {
     clearPreviewRows()
+    // 预览的在线人数 / 榜单也一起撤掉，回落到真实快照（未连接时列会整条消失）
+    audiencePreview.value = null
+  })
+  // 在线人数 / 实时在线榜：每 30 秒一次；带 preview 标记的是「发送测试弹幕」推的
+  unlistenAudience = await listen<AudienceSnapshot>('audience-update', e => {
+    if (e.payload.preview) {
+      audiencePreview.value = e.payload
+    } else {
+      audience.value = e.payload
+    }
   })
   unlistenStyle = await listen<OverlayStyle>('overlay-style', e => {
     style.value = e.payload
@@ -295,6 +339,12 @@ onMounted(async () => {
   // 初始同步过滤配置
   try {
     filter.value = await invoke<DanmakuFilter>('danmaku_get_filter')
+  } catch {
+    /* ignore */
+  }
+  // 初始同步在线人数 / 在线榜（Rust 此前可能已经拉过；还没有就等下一次事件）
+  try {
+    audience.value = await invoke<AudienceSnapshot | null>('audience_get')
   } catch {
     /* ignore */
   }
@@ -328,12 +378,14 @@ onUnmounted(() => {
   unlistenWelcome?.()
   unlistenWelcomeCfg?.()
   unlistenPreviewReset?.()
+  unlistenAudience?.()
 })
 </script>
 
 <template>
   <div
     class="overlay-root"
+    :class="{ 'with-audience': audienceOn }"
     :style="{
       fontSize: style.font_size + 'px',
       fontFamily: style.font_family,
@@ -361,6 +413,20 @@ onUnmounted(() => {
     <!-- 头衔列的边界提示：面板底色左侧那条竖带是留给舰长 / 房管 / 粉丝牌的，
          平时完全透明（常驻线条会被 OBS 一起录进画面），鼠标进入弹幕窗时浮出淡底与虚线。 -->
     <div class="title-band" />
+    <!-- 右侧在线列：在看人数 + 实时在线榜（两个开关独立控制；整列显示时面板右侧让出等宽留白）。
+         提示带与内容分开：内容必须常显（主角），提示底与虚线只做边界示意、鼠标移入才浮出。 -->
+    <template v-if="audienceOn">
+      <div class="audience-band" />
+      <div v-if="shownAudience" class="audience-slot">
+        <AudienceColumn
+          :snapshot="shownAudience"
+          :overlay-style="style"
+          :show-online="style.show_online"
+          :show-rank="style.show_rank" />
+      </div>
+      <!-- 右侧现在是内容列，没有可见的面板边缘可抓，所以手柄放在窗口右缘（系统热区只有 3px） -->
+      <div class="resize-handle-east" @mousedown="startResizeEast" />
+    </template>
     <!-- 缩放手柄：把「能缩放的位置」挪到看得见的底色边缘上。
          系统给的缩放热区固定在窗口最外缘（实测只有 3px），离这条边有 5.15em 远，
          用户按直觉抓可见边缘时只能拖动窗口、以为什么都抓不到。 -->
@@ -376,6 +442,12 @@ onUnmounted(() => {
 .overlay-root {
   --role-indent: 5.5em;
   --panel-inset: calc(var(--role-indent) - 0.35em);
+  /* 右侧在线列：宽度与左侧头衔列对称（同 5.5em 起步，取 6.5em 是为了放下「在看 9999+」
+     与「舰长牌 + 昵称」，昵称放不下时按弹幕那样折行）。--audience-inset 是面板底色实际
+     让出的宽度，比整列窄 0.35em（与 --panel-inset 同一套算法）。
+     两个开关都关时 .with-audience 不生效，inset 为 0，面板恢复满宽。 */
+  --audience-indent: 6.5em;
+  --audience-inset: 0px;
   position: relative;
   height: 100%;
   display: flex;
@@ -386,6 +458,11 @@ onUnmounted(() => {
   overflow: hidden;
   background: transparent;
   user-select: none;
+}
+
+/* 在线列显示时才让出右留白（与 window.rs 的 AUDIENCE_INDENT_EM 必须一致） */
+.overlay-root.with-audience {
+  --audience-inset: calc(var(--audience-indent) - 0.35em);
 }
 
 /* 面板：礼物区 + 弹幕区共用的圆角矩形（底色由「背景不透明度」控制）。
@@ -403,6 +480,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: inherit;
   margin-left: var(--panel-inset);
+  /* 右侧让出在线列的位置：背景右边缘左移，内部两区不做反向拉回，
+     于是弹幕文字的右边界就落在面板底色内侧，右侧那条竖带留给在线列 */
+  margin-right: var(--audience-inset);
   border-radius: 15px;
   overflow: visible;
 }
@@ -442,8 +522,9 @@ onUnmounted(() => {
 .drag-strip {
   /* 不参与压缩，否则弹幕一多就被挤成一条线 */
   flex: 0 0 auto;
-  /* 左端对齐面板背景左边缘（也避开了房管/舰长徽章） */
+  /* 左端对齐面板背景左边缘（也避开了房管/舰长徽章）；右端同样让出在线列 */
   margin-left: var(--panel-inset);
+  margin-right: var(--audience-inset);
   height: 1.4em;
   cursor: move;
   background: transparent;
@@ -507,6 +588,53 @@ onUnmounted(() => {
   position: absolute;
   /* -4.5px + 9px 宽 = 手柄中心正好落在面板底色左边缘上（6px + --panel-inset） */
   left: calc(6px + var(--panel-inset) - 4.5px);
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: 9px;
+  cursor: ew-resize;
+}
+
+/* 右侧在线列的边界提示带：与左侧 .title-band 同一套做法（淡底 + 虚线，鼠标移入才浮出）。
+   虚线在左边缘 = 面板底色的右边界；内容单独放在 .audience-slot 里常显，
+   否则提示带的 opacity: 0 会把「在看 123」一起藏掉。
+   宽度 = 整列宽 − 0.35em：起点正好落在面板底色右边缘（与 .panel 的 margin-right 互补）。 */
+.audience-band {
+  position: absolute;
+  right: 6px;
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: calc(var(--audience-indent) - 0.35em);
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 1px dashed rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  /* 不接管鼠标：这一段仍由根节点负责拖动 */
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.overlay-root:hover .audience-band {
+  opacity: 1;
+}
+
+/* 在线列内容：从面板底色右边缘起、留 0.35em 空隙，右端到窗口 padding 为止。
+   起点必须与面板底色右边缘对齐——这正是右列的「列」含义（左侧头衔列同理由）。 */
+.audience-slot {
+  position: absolute;
+  right: 6px;
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: calc(var(--audience-indent) - 0.35em);
+  padding-left: 0.35em;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 右侧缩放热区：放在窗口右缘（那里才是系统认可的缩放位置），只把 3px 放宽到 9px。
+   在线列出现后没有可见的面板边缘可抓，所以不做成"贴着虚线"的手柄——
+   那会压在「在看 123」上，点文字就变成缩放。 */
+.resize-handle-east {
+  position: absolute;
+  right: 0;
   top: calc(6px + 1.4em);
   bottom: 6px;
   width: 9px;

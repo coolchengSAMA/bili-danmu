@@ -47,6 +47,10 @@ pub struct OverlayStyle {
     pub row_gap: f64,
     /// 弹幕区 / 礼物区的背景不透明度（0-100，0 = 完全透明，100 = 纯黑）
     pub bg_opacity: f64,
+    /// 弹幕窗右侧那一列是否显示「在看 N 人」
+    pub show_online: bool,
+    /// 弹幕窗右侧那一列是否显示「实时在线榜」（前 5 名）
+    pub show_rank: bool,
 }
 
 impl Default for OverlayStyle {
@@ -65,6 +69,9 @@ impl Default for OverlayStyle {
             outline_width: 2.0,
             row_gap: 0.0,
             bg_opacity: 35.0,
+            // 右侧在线列默认开：主播装它就是想在直播时瞄一眼有没有人
+            show_online: true,
+            show_rank: true,
         }
     }
 }

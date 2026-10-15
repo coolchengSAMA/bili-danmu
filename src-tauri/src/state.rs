@@ -102,6 +102,31 @@ impl Default for OverlayState {
     }
 }
 
+/// 「在线人数 + 实时在线榜」的内存态（弹幕窗右侧那一列）
+///
+/// 只在内存里放最近一次成功拉取的快照：重启清空是有意的（这是"此刻"的数据，
+/// 存盘没意义，也避免给轻量化加一处磁盘写入）。`anchor` 缓存「房间 → 主播 uid」，
+/// 因为榜单接口要 `ruid`，而 `room_init` 只在换房时需要调一次。
+pub(crate) struct AudienceState {
+    pub(crate) snapshot: Mutex<Option<crate::bilibili::audience::AudienceSnapshot>>,
+    pub(crate) anchor: Mutex<Option<(u32, i64)>>,
+    /// 上次尝试拉取的房间与时刻：失败时限速重试（避免 2 秒 tick 变成每 2 秒一次的请求）
+    pub(crate) last_try: Mutex<Option<(u32, Instant)>>,
+    /// 上次成功拉取的时刻：正常节奏按它算（30 秒一次）
+    pub(crate) last_ok: Mutex<Option<Instant>>,
+}
+
+impl Default for AudienceState {
+    fn default() -> Self {
+        Self {
+            snapshot: Mutex::new(None),
+            anchor: Mutex::new(None),
+            last_try: Mutex::new(None),
+            last_ok: Mutex::new(None),
+        }
+    }
+}
+
 /// 发送框状态（可见性 + 当前已注册的全局快捷键）
 ///
 /// 与 `OverlayState::visible` 同理：前端启动时就会读可见性，窗口未必已建好，
