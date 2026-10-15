@@ -41,6 +41,18 @@ function parseWords(text: string): string[] {
   ]
 }
 
+/**
+ * 点行内空白 / 标签文字 = 点这一行的开关（与 `SettingRow` 同一套做法）
+ *
+ * 这几行是本组件手写的（第三行的标签里嵌了数字输入框，套不进 SettingRow），
+ * 所以整行可点的逻辑在这里再实现一次：点在控件上的点击一律放行。
+ */
+function onRowClick(e: MouseEvent) {
+  const el = e.target as HTMLElement | null
+  if (!el || el.closest('input, select, textarea, button, a, label')) return
+  el.closest('.setting-row')?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click()
+}
+
 function emitChange() {
   // 数字输入框清空时 v-model.number 为 ''，避免脏值传给 Rust u32 反序列化报错
   if (!Number.isFinite(draft.value.wealth_min)) {
@@ -55,17 +67,17 @@ function emitChange() {
 
 <template>
   <div class="setting-card">
-    <div class="setting-row">
+    <div class="setting-row" @click="onRowClick">
       <span class="label">只{{ verb }}舰长 / 房管弹幕</span>
       <input v-model="draft.enable_guard_admin" type="checkbox" class="switch" @change="emitChange()" />
     </div>
 
-    <div class="setting-row">
+    <div class="setting-row" @click="onRowClick">
       <span class="label">只{{ verb }}有粉丝牌的弹幕</span>
       <input v-model="draft.enable_medal" type="checkbox" class="switch" @change="emitChange()" />
     </div>
 
-    <div class="setting-row">
+    <div class="setting-row" @click="onRowClick">
       <span class="label">
         只{{ verb }}荣耀等级 ≥
         <input
@@ -83,7 +95,7 @@ function emitChange() {
   </div>
 
   <div class="setting-card words-card">
-    <div class="setting-row">
+    <div class="setting-row" @click="onRowClick">
       <span class="label">屏蔽含敏感词的弹幕</span>
       <input v-model="draft.enable_sensitive" type="checkbox" class="switch" @change="emitChange()" />
     </div>

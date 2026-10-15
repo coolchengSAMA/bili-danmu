@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import QRCode from 'qrcode'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { refreshLogin, useLogin } from '../composables/useLogin'
 
@@ -82,12 +82,41 @@ function stopPolling() {
   }
 }
 
-onMounted(startLogin)
-onUnmounted(stopPolling)
+// 已扫码、等手机确认：这时关掉弹窗会停掉轮询、二维码作废，用户得重新扫
+const confirming = computed(() => phase.value === 'confirmed')
+
+/** 关闭前先拦一下「正在确认」的状态；关闭弹窗 = 取消这次登录（轮询随之下线） */
+function requestClose() {
+  if (confirming.value) return
+  closeLoginDialog()
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  requestClose()
+}
+
+// 二维码只在弹窗打开时才生成，关闭即停轮询
+//
+// 以前是 onMounted 就跑 startLogin()：等于每次启动应用都白拿一个二维码并轮询到过期，
+// 而用户真去扫码时（可能几分钟后）看到的是「二维码已过期，请重新生成」。
+watch(loginDialogOpen, open => {
+  if (open) {
+    void startLogin()
+  } else {
+    stopPolling()
+  }
+})
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  stopPolling()
+})
 </script>
 
 <template>
-  <div v-if="loginDialogOpen" class="dialog-mask" @click.self="closeLoginDialog">
+  <div v-if="loginDialogOpen" class="dialog-mask" @click.self="requestClose">
     <div class="dialog">
       <h3>扫码登录 B 站</h3>
       <p class="hint">B 站要求登录后才能接收弹幕，登录信息仅保存在本机</p>

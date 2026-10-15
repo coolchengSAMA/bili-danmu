@@ -40,6 +40,9 @@ const disabledHint = computed(() => {
   return ''
 })
 
+// 输入法组合态：中文输入法里回车是「选词上屏」，不能当成发送
+const composing = ref(false)
+
 async function sendDanmaku() {
   const text = danmakuText.value.trim()
   if (!text || sending.value || !canSend.value) return
@@ -53,6 +56,20 @@ async function sendDanmaku() {
   } finally {
     sending.value = false
   }
+}
+
+/**
+ * 回车发送
+ *
+ * 必须挡掉输入法组合态：中文输入法里按回车是「选词上屏」，Chromium 派发顺序是
+ * keydown(isComposing=true) → compositionend → keyup(isComposing 已是 false)，
+ * 所以用 Vue 的 `@keyup.enter` 会把半成品拼音直接发出去（`v-model` 有组合态守卫，
+ * 按键修饰符没有）。改成监听 keydown，再自己 + 事件两侧各判一次组合态。
+ */
+function onEnter(e: KeyboardEvent) {
+  // 按住回车会重复派发 keydown：旧实现监听 keyup 不会，这里自己挡掉
+  if (e.repeat || composing.value || e.isComposing) return
+  void sendDanmaku()
 }
 
 /** 切换鼠标穿透（发送框隐藏时本按钮不可用，此时主界面「弹幕窗」标签 / 托盘仍可关掉穿透） */
@@ -129,7 +146,9 @@ onUnmounted(() => {
         :placeholder="inputPlaceholder"
         maxlength="100"
         :disabled="!canSend"
-        @keyup.enter="sendDanmaku" />
+        @compositionstart="composing = true"
+        @compositionend="composing = false"
+        @keydown.enter="onEnter" />
       <button
         type="button"
         class="ct-btn"

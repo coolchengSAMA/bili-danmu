@@ -180,14 +180,18 @@ async function handleLogout() {
       <input
         v-model="roomId"
         class="room-input"
-        type="number"
-        placeholder="输入直播间 ID，如 22312451"
-        :disabled="locked" />
+        type="text"
+        placeholder="输入直播间 ID 或直播间链接，如 22312451"
+        :disabled="locked"
+        @keyup.enter="connect()" />
       <button v-if="status.state === 'connected'" class="btn danger" :disabled="busy" @click="disconnect">断开</button>
       <button v-else class="btn primary" :disabled="busy || status.state === 'connecting'" @click="connect()">
         连接
       </button>
     </div>
+
+    <!-- 失败提示紧贴输入框：原来放在折叠区之后，离刚操作的地方隔了上百像素 -->
+    <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
     <!-- streamer 分支：最近连接与关注在播都折叠（默认收起，需要时展开） -->
     <div v-if="recentRooms.length" class="fold-bar">
@@ -232,8 +236,6 @@ async function handleLogout() {
         </button>
       </div>
     </div>
-
-    <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
     <div class="status-box">
       <span
@@ -326,13 +328,6 @@ h2 {
   color: var(--text-faint);
   cursor: not-allowed;
   opacity: 0.7;
-}
-
-/* 隐藏 number 输入框自带的上下步进箭头 */
-.room-input::-webkit-outer-spin-button,
-.room-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
 }
 
 .btn {

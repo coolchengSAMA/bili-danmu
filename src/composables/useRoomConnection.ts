@@ -12,6 +12,27 @@ const STATUS_TEXT: Record<string, string> = {
 }
 
 /**
+ * 从用户输入里取房间号
+ *
+ * 除了直接输房间号，也支持把直播间链接整条粘进来（主播日常就是这么复制地址的）：
+ * - 纯数字：原样用（不限制位数，历史上有很短的房间号）
+ * - 直播间链接：先按域名 + 路径抠（`live.bilibili.com/22312451`、`/blanc/123` 都能认），
+ *   避免被查询串里的数字（`?visit_id=…`）带偏
+ * - 其它：退化成「取最后一段 3 位以上数字」
+ *
+ * 取不到合法房间号时返回 0，由调用方给提示。
+ */
+function parseRoomId(raw: string): number {
+  const text = raw.trim()
+  if (!text) return 0
+  const picked = /^\d+$/.test(text)
+    ? text
+    : (/live\.bilibili\.com\/(?:blanc\/|blackboard\/)?(\d+)/.exec(text)?.[1] ?? text.match(/\d{3,}/g)?.pop() ?? '')
+  const id = Number(picked)
+  return Number.isSafeInteger(id) && id > 0 ? id : 0
+}
+
+/**
  * 直播间连接：连接 / 断开、状态订阅与最近房间面包屑。
  *
  * 状态来源有两条：room-status 事件（主）与 get_connection_status 轮询由 Overlay 负责；
@@ -33,16 +54,22 @@ export function useRoomConnection() {
 
   const statusText = computed(() => STATUS_TEXT[status.value.state] ?? status.value.state)
 
-  /** 连接直播间；target 为面包屑直连的房间号，会回填输入框保证与连接目标一致 */
+  /**
+   * 连接直播间
+   *
+   * `target` 为面包屑 / 自己房间卡片直连的房间号，会回填输入框保证与连接目标一致；
+   * 从输入框连接时允许粘贴直播间链接（见 `parseRoomId`），并把规范化后的房间号写回输入框。
+   */
   async function connect(target?: number) {
     if (target !== undefined) {
       roomId.value = String(target)
     }
-    const id = Number(roomId.value)
-    if (!Number.isInteger(id) || id <= 0) {
-      errorMsg.value = '请输入有效的直播间 ID'
+    const id = parseRoomId(roomId.value)
+    if (!id) {
+      errorMsg.value = '请输入有效的直播间 ID（也可以直接粘贴直播间链接）'
       return
     }
+    roomId.value = String(id)
     errorMsg.value = ''
     busy.value = true
     try {
