@@ -34,7 +34,7 @@ const current = ref<NavKey>('room')
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        bili-danmu
+        <span class="brand-name">bili-danmu</span>
         <span class="brand-edition">streamer</span>
       </div>
       <nav>
@@ -75,24 +75,34 @@ const current = ref<NavKey>('room')
   background: var(--bg-side);
 }
 
+/* 品牌区：侧边栏只有 150px（内宽 122px），「bili-danmu + 徽章」一行放不下
+   （17px 品牌名约 95px，徽章再小也塞不进去），所以品牌名一行、徽章另起一行 */
 .brand {
-  padding: 16px 14px;
-  font-weight: 600;
-  font-size: 17px;
-  color: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 14px 14px 12px;
   border-bottom: 1px solid var(--border);
-  /* 侧边栏窄：品牌名与「streamer」标签排一行，标签小一号才不会被挤到第二行 */
-  white-space: nowrap;
 }
 
+.brand-name {
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--accent);
+}
+
+/* 分支徽章：胶囊小卡片（柔和底色 + 对比色文字），比描边方框更像版本标签 */
 .brand-edition {
-  margin-left: 6px;
-  padding: 1px 5px;
-  font-size: 12px;
-  font-weight: 400;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  vertical-align: 2px;
+  padding: 1px 7px 2px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: 0.5px;
+  color: var(--accent-strong-text);
+  background: var(--accent-soft);
+  border-radius: 999px;
 }
 
 nav {
