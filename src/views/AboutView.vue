@@ -13,7 +13,7 @@ const version = ref('')
 // 出处与许可是 GPL-3.0 要求保留的（LICENSE / README / STREAMER.md 里都有），
 // 原作者的支持入口不在这里重复展示——上游仓库里就能找到，避免让人误以为赞赏是给本分支的。
 const REPOS = [
-  { key: 'fork', label: '本仓库（streamer 分支）', short: 'github.com/coolchengSAMA/bili-danmu' },
+  { key: 'fork', label: '本仓库（streamer 分支）', short: 'github.com/coolchengSAMA/bili-danmu-streamer' },
   { key: 'upstream', label: '上游原始项目', short: 'github.com/bd-dxg/bili-danmu' },
 ]
 

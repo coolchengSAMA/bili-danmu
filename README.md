@@ -4,7 +4,7 @@
 
 <p align="center">3 MB 的安装包，一个不跟游戏抢资源的 B 站弹幕助手（自用分支）</p>
 
-> **本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork**，主线是**个人自用分支**（`streamer`）：按我自己使用中的体验来改与加功能。与上游的差异见下方「streamer 分支差异」，完整清单与回退方式见 [`STREAMER.md`](./STREAMER.md)；安装包见[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases)。
+> **本仓库是 [bd-dxg/bili-danmu](https://github.com/bd-dxg/bili-danmu) 的 fork**，主线是**个人自用分支**（`streamer`）：按我自己使用中的体验来改与加功能。与上游的差异见下方「streamer 分支差异」，完整清单与回退方式见 [`STREAMER.md`](./STREAMER.md)；安装包见[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu-streamer/releases)。
 > **上游是原始项目**：本版基于上游开发（核心的弹幕协议解析、朗读等能力都来自上游），出处与许可证保留在 [`STREAMER.md`](./STREAMER.md) 与 `LICENSE`；**如果它帮到你，支持请优先给[上游作者](https://github.com/bd-dxg/bili-danmu)**。
 
 ## streamer 分支差异
@@ -74,7 +74,7 @@
 
 ## 快速开始
 
-> 只想用不想编译：到[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu/releases) 下载安装包（`bili-danmu-streamer_x.y.z-streamer.N_x64-setup.exe`）双击安装即可。
+> 只想用不想编译：到[本仓库 Releases](https://github.com/coolchengSAMA/bili-danmu-streamer/releases) 下载安装包（`bili-danmu-streamer_x.y.z-streamer.N_x64-setup.exe`）双击安装即可。
 
 1. 扫码登录（**必做**：B 站 2025+ 不向游客推送弹幕，未登录收不到弹幕；登录后还会显示昵称）
 2. 输入直播间号，点「连接」（直播时也可点上方「我的直播间」卡片右侧的「连自己房间」；「最近连接」折叠区里点一下可直连其它房间）

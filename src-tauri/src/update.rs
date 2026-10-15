@@ -14,9 +14,9 @@ use tauri::AppHandle;
 /// 上游的 `vX.Y.Z` 与本版不是同一条版本线（对不齐会一直提示「有新版本」）。
 /// 仓库改名后这里改成新名字即可；GitHub 对被改名仓库的 API 请求会返回 301，
 /// 所以旧名字也能继续工作（reqwest 默认跟随重定向）。
-const API_LATEST: &str = "https://api.github.com/repos/coolchengSAMA/bili-danmu/releases/latest";
+const API_LATEST: &str = "https://api.github.com/repos/coolchengSAMA/bili-danmu-streamer/releases/latest";
 /// 响应缺 html_url 时的兜底地址：发布列表页而非具体 tag，总能打开
-const RELEASES_PAGE: &str = "https://github.com/coolchengSAMA/bili-danmu/releases";
+const RELEASES_PAGE: &str = "https://github.com/coolchengSAMA/bili-danmu-streamer/releases";
 
 #[derive(serde::Serialize)]
 pub(crate) struct UpdateInfo {
