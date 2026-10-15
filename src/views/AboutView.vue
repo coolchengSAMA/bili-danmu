@@ -9,26 +9,28 @@ import { checkUpdate, openUpdatePage, useUpdate } from '../composables/useUpdate
 // 不在前端再抄一份；浏览器里跑（pnpm dev 无 Tauri 注入）时拿不到，徽章自行隐藏
 const version = ref('')
 
-// 仓库地址：streamer 分支自己的仓库。页面展示短形式，复制到剪贴板的是带协议的规范 URL。
-// 上游仓库地址与原作者的支持入口在这里不再展示（出处与许可仍完整保留在仓库的
-// README / STREAMER.md / LICENSE 里，GPL-3.0 要求的部分不能省）。
-const REPO_LABEL = 'github.com/coolchengSAMA/bili-danmu'
-const REPO_URL = `https://${REPO_LABEL}`
+// 两个地址都写清楚：本分支（fork）与上游原始项目。
+// 出处与许可是 GPL-3.0 要求保留的（LICENSE / README / STREAMER.md 里都有），
+// 原作者的支持入口不在这里重复展示——上游仓库里就能找到，避免让人误以为赞赏是给本分支的。
+const REPOS = [
+  { key: 'fork', label: '本仓库（streamer 分支）', short: 'github.com/coolchengSAMA/bili-danmu' },
+  { key: 'upstream', label: '上游原始项目', short: 'github.com/bd-dxg/bili-danmu' },
+]
 
-const copied = ref(false)
+const copiedKey = ref('')
 const copyError = ref('')
 const logError = ref('')
 let tipTimer: ReturnType<typeof setTimeout> | undefined
 
 // 不用 <a target="_blank">：Tauri 默认不处理 WebView2 的新窗口请求（wry 会直接
 // SetHandled(true) 吞掉），链接点了没反应；剪贴板是纯 Web API，无需插件。
-async function copyRepoUrl() {
+async function copyRepoUrl(short: string) {
   copyError.value = ''
   try {
-    await navigator.clipboard.writeText(REPO_URL)
-    copied.value = true
+    await navigator.clipboard.writeText(`https://${short}`)
+    copiedKey.value = short
     if (tipTimer) clearTimeout(tipTimer)
-    tipTimer = setTimeout(() => (copied.value = false), 1500)
+    tipTimer = setTimeout(() => (copiedKey.value = ''), 1500)
   } catch {
     // 剪贴板被拒（罕见）：地址本身可选中，退化成手动复制
     copyError.value = '复制失败，请手动选中地址复制'
@@ -127,12 +129,16 @@ onUnmounted(() => {
 
     <div class="card">
       <h3>项目地址</h3>
-      <div class="repo-row">
-        <span class="repo-url">{{ REPO_LABEL }}</span>
-        <button class="copy-btn" @click="copyRepoUrl()">
-          {{ copied ? '✓ 已复制' : '复制' }}
+      <div v-for="r in REPOS" :key="r.key" class="repo-row">
+        <span class="repo-label">{{ r.label }}</span>
+        <span class="repo-url">{{ r.short }}</span>
+        <button class="copy-btn" @click="copyRepoUrl(r.short)">
+          {{ copiedKey === r.short ? '✓ 已复制' : '复制' }}
         </button>
       </div>
+      <p class="repo-note">
+        本分支基于上游开发（GPL-3.0），核心的弹幕协议解析、朗读等能力都来自上游； 如果它帮到你，支持请优先给上游作者。
+      </p>
       <p v-if="copyError" class="repo-error">{{ copyError }}</p>
       <p v-if="logError" class="repo-error">{{ logError }}</p>
     </div>
@@ -140,6 +146,7 @@ onUnmounted(() => {
     <div class="card">
       <h3>致谢开源</h3>
       <ul class="thanks">
+        <li>上游项目 bd-dxg/bili-danmu（本分支的基础）</li>
         <li>B 站弹幕协议相关接口的公开分析与实现</li>
         <li>
           <a href="https://github.com/SoraYjy/DanmuFree" target="_blank" rel="noreferrer">DanmuFree</a>
@@ -207,19 +214,41 @@ h2 {
   text-decoration: underline;
 }
 
+/* 每行一条地址：标签（本仓库 / 上游）定宽，地址占中间，复制按钮靠右 */
 .repo-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+}
+
+.repo-row + .repo-row {
+  margin-top: 8px;
+}
+
+.repo-label {
+  flex-shrink: 0;
+  /* 容得下「本仓库（streamer 分支）」一行不换行 */
+  width: 12.6em;
+  font-size: 14px;
+  color: var(--text-faint);
 }
 
 .repo-url {
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   color: var(--text-dim);
   /* 全局禁了选中，这里放开：复制失败时还能手动选中 */
   user-select: text;
   overflow-wrap: anywhere;
+}
+
+/* 出处说明：小字，讲清「本分支基于上游」且支持优先给上游 */
+.repo-note {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-faint);
 }
 
 .copy-btn {

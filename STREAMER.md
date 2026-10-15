@@ -27,7 +27,7 @@
 | 热键切换落盘 | — | 可见性去重落盘（连按 5 下 = 1 次写盘） | 写盘是整份 config + DPAPI 加解密，而热键回调在主线程 | —（属发送框功能的实现细节） |
 
 | 软件名称 | `productName = bili-danmu`，界面显示 `bili-danmu` | 产品名 `bili-danmu-streamer`（安装目录 / 开始菜单 / 安装包名），界面显示「**bili-danmu-streamer**」（主窗口标题、弹幕窗 / 发送框标题、托盘提示） | 与 streamer 分支定位一致 | 改回 `tauri.conf.json` 的 `productName` 与三处窗口标题 / 托盘提示 |
-| 关于页 | 上游项目地址 + 原作者的微信赞赏码 | 项目地址指向**本仓库**；上游地址与赞赏入口移除；出处与许可仍完整保留在 `README` / `STREAMER.md` / `LICENSE` | 这是本仓库自己的版本；GPL-3.0 要求的署名与许可不能省，所以只去掉 UI 上的入口 | 从 git 历史恢复 `AboutView.vue` 与 `src/assets/reward-code.webp` |
+| 关于页 | 上游项目地址 + 原作者的微信赞赏码 | 同时列出**本仓库**与**上游原始项目**两个地址（各带复制按钮），并写明「本分支基于上游开发；支持请优先给上游作者」；**赞赏码不搬进 App**（上游仓库里能找到，混在一起容易让人以为赞赏是给本分支的）；出处与许可保留在 `README` / `STREAMER.md` / `LICENSE` | 本分支只是自用改动，不该冒充独立项目，也不该截流原作者的赞赏入口 | 从 git 历史恢复 `AboutView.vue` 与 `src/assets/reward-code.webp` |
 | 版本号 / 更新检查 | 版本 `1.4.1`，查上游 `releases/latest` | 版本 `1.4.1-streamer.N`，查**本仓库** `releases/latest`（版本比较支持 `-streamer.N` 第四段） | streamer 分支与上游不是同一条版本线：查上游会一直把上游的 `vX.Y.Z` 当成「有新版本」 | 改回三处版本号与 `update.rs` 里的仓库常量 |
 
 > 标「已提 PR」的改动**不要在上游合并后再改一遍**：合并后从上游同步即可，差异自动消失。
