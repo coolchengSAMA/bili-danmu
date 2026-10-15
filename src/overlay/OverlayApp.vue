@@ -416,6 +416,9 @@ onUnmounted(() => {
     <!-- 右侧在线列：在看人数 + 实时在线榜（两个开关独立控制；整列显示时面板右侧让出等宽留白）。
          提示带与内容分开：内容必须常显（主角），提示底与虚线只做边界示意、鼠标移入才浮出。 -->
     <template v-if="audienceOn">
+      <!-- 右列底色：与弹幕窗同一份背景色（同一个 bg_opacity），右边圆角、左边直角，
+           面板在右列显示时也去掉右侧圆角 → 两块拼成一个连续的底，中间只留一条淡分隔线 -->
+      <div class="audience-bg" :style="{ backgroundColor: bgColor }" />
       <div class="audience-band" />
       <div v-if="shownAudience" class="audience-slot">
         <AudienceColumn
@@ -463,6 +466,12 @@ onUnmounted(() => {
 /* 在线列显示时才让出右留白（与 window.rs 的 AUDIENCE_INDENT_EM 必须一致） */
 .overlay-root.with-audience {
   --audience-inset: calc(var(--audience-indent) - 0.35em);
+}
+
+/* 右列有自己的底色，面板就不该再有右侧圆角：两块拼起来才是一个连续圆角矩形 */
+.overlay-root.with-audience .panel {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* 面板：礼物区 + 弹幕区共用的圆角矩形（底色由「背景不透明度」控制）。
@@ -516,6 +525,12 @@ onUnmounted(() => {
   padding-bottom: 0.4em;
   /* 同 .gift-area：行回到窗口原位，只有背景面板右移 */
   margin-left: calc(-1 * var(--panel-inset));
+}
+
+/* 右列显示时给正文留一点右边距：否则文字会贴着两块底色之间的分隔线 */
+.overlay-root.with-audience .danmaku-area,
+.overlay-root.with-audience .gift-area {
+  padding-right: 0.35em;
 }
 
 /* 顶部常驻拖拽条：占位独立行（不压内容），平时透明；鼠标移入悬浮窗即浮出提示 */
@@ -594,9 +609,8 @@ onUnmounted(() => {
   cursor: ew-resize;
 }
 
-/* 右侧在线列的边界提示带：与左侧 .title-band 同一套做法（淡底 + 虚线，鼠标移入才浮出）。
-   虚线在左边缘 = 面板底色的右边界；内容单独放在 .audience-slot 里常显，
-   否则提示带的 opacity: 0 会把「在看 123」一起藏掉。
+/* 右侧在线列的边界提示带：与左侧 .title-band 同一套做法（鼠标移入才浮出）。
+   底色已经由 .audience-bg 常显，这里只负责那条虚线边界 + 移入时轻微提亮。
    宽度 = 整列宽 − 0.35em：起点正好落在面板底色右边缘（与 .panel 的 margin-right 互补）。 */
 .audience-band {
   position: absolute;
@@ -604,7 +618,7 @@ onUnmounted(() => {
   top: calc(6px + 1.4em);
   bottom: 6px;
   width: calc(var(--audience-indent) - 0.35em);
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   border-left: 1px dashed rgba(255, 255, 255, 0.35);
   opacity: 0;
   /* 不接管鼠标：这一段仍由根节点负责拖动 */
@@ -614,6 +628,21 @@ onUnmounted(() => {
 
 .overlay-root:hover .audience-band {
   opacity: 1;
+}
+
+/* 右列底色：与弹幕窗同一份 bgColor（由模板内联下发），右边圆角、左边直角。
+   面板在右列显示时去掉右侧圆角（见 .overlay-root.with-audience .panel），
+   两块因此拼成一个连续的底，中间只有一条淡分隔线，看起来仍是"一个弹幕窗"。 */
+.audience-bg {
+  position: absolute;
+  right: 6px;
+  top: calc(6px + 1.4em);
+  bottom: 6px;
+  width: calc(var(--audience-indent) - 0.35em);
+  border-radius: 0 15px 15px 0;
+  /* 与面板底色之间的分隔线：1px 淡白，不抢视线 */
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
 }
 
 /* 在线列内容：从面板底色右边缘起、留 0.35em 空隙，右端到窗口 padding 为止。
@@ -627,6 +656,8 @@ onUnmounted(() => {
   padding-left: 0.35em;
   box-sizing: border-box;
   overflow: hidden;
+  /* 内容压在底色之上（DOM 顺序已保证，这里只为语义明确） */
+  z-index: 1;
 }
 
 /* 右侧缩放热区：放在窗口右缘（那里才是系统认可的缩放位置），只把 3px 放宽到 9px。
