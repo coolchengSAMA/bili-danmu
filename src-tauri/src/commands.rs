@@ -8,7 +8,7 @@ use crate::config;
 use crate::shortcut;
 use crate::state::{prune_ticks, AppState, OverlayState, RoomStatus, SenderState};
 use crate::tts;
-use crate::window::{overlay_window, set_sender_visible, sync_sender_docked};
+use crate::window::{overlay_window, reset_overlay_position, set_sender_visible, sync_sender_docked};
 use serde_json::json;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -327,6 +327,15 @@ pub(crate) fn overlay_set_size(app: AppHandle, width: f64, height: f64) -> Resul
     let win = overlay_window(&app).ok_or("Overlay 窗口未创建")?;
     win.set_size(tauri::LogicalSize::new(width, height))
         .map_err(|e| format!("调整尺寸失败: {e}"))
+}
+
+/// 把弹幕窗移回主显示器中央
+///
+/// 换显示器 / 改分辨率 / 拔掉副屏之后，弹幕窗可能落在不存在的坐标上：看不见也拖不回来，
+/// 而设置页只能改宽高，没有位置入口。尺寸只在比工作区还大时才收窄。
+#[tauri::command]
+pub(crate) fn overlay_reset_position(app: AppHandle) -> Result<(), String> {
+    reset_overlay_position(&app)
 }
 
 /// 查询登录态

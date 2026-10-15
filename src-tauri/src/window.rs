@@ -66,6 +66,10 @@ pub(crate) fn flush_overlay_bounds(app: &AppHandle) {
 }
 
 /// 发送框始终吸附：左端与弹幕区面板背景左边缘齐平，宽度取面板宽度的 50%（上限 260px），高度随字号
+///
+/// 吸附点算完还要**夹进弹幕窗所在显示器的工作区**（见 `fit_docked_position`）：
+/// 弹幕窗被拖到屏幕底部时正下方就是屏幕外，而发送框不可拖动、也不在任务栏显示，
+/// 用户既看不到它、也不知道要先把弹幕窗挪上来。
 pub(crate) fn sync_sender_docked(app: &AppHandle) {
     let (Some(ov), Some(sender)) = (overlay_window(app), sender_window(app)) else {
         return;
@@ -74,10 +78,55 @@ pub(crate) fn sync_sender_docked(app: &AppHandle) {
     let Ok(size) = ov.outer_size() else { return };
     let scale = ov.scale_factor().unwrap_or(1.0);
     let (indent, w, h) = sender_layout_metrics(app, scale, size.width);
-    let x = pos.x + indent as i32;
-    let y = pos.y + size.height as i32;
+    let (x, y) = fit_docked_position(
+        // 用弹幕窗所在显示器的工作区：多屏时发送框跟着弹幕窗走
+        ov.current_monitor().ok().flatten().map(|m| *m.work_area()),
+        pos.x,
+        pos.y,
+        size.height,
+        indent as i32,
+        w,
+        h,
+    );
     let _ = sender.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
     let _ = sender.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h)));
+}
+
+/// 算出吸附后的发送框位置（物理像素），并把结果夹进工作区
+///
+/// 落点优先级：弹幕窗正下方 → 正上方（下方放不下）→ 贴工作区下沿
+/// （上下都放不下，即弹幕窗本身比工作区还高时：宁可压住弹幕窗也要能用）。
+/// 左右同理，但**越界时可见优先于对齐**：正常情况发送框左端仍与面板底色左边缘同一条线，
+/// 只有弹幕窗自己都跑到屏幕外时才会偏离。取不到显示器信息（`None`）就按原样吸附，
+/// 与改动前行为一致。
+fn fit_docked_position(
+    work: Option<tauri::PhysicalRect<i32, u32>>,
+    overlay_x: i32,
+    overlay_y: i32,
+    overlay_h: u32,
+    indent: i32,
+    w: u32,
+    h: u32,
+) -> (i32, i32) {
+    let x = overlay_x + indent;
+    let y = overlay_y + overlay_h as i32;
+    let Some(work) = work else { return (x, y) };
+    let (iw, ih) = (w as i32, h as i32);
+    let left = work.position.x;
+    let top = work.position.y;
+    let right = work.position.x + work.size.width as i32;
+    let bottom = work.position.y + work.size.height as i32;
+    let want_y = if y + ih <= bottom {
+        y
+    } else if overlay_y - ih >= top {
+        overlay_y - ih
+    } else {
+        bottom - ih
+    };
+    (
+        x.clamp(left, (right - iw).max(left)),
+        want_y.clamp(top, (bottom - ih).max(top)),
+    )
 }
 
 /// 显示 / 隐藏发送框
@@ -170,4 +219,287 @@ fn sender_layout_metrics(app: &AppHandle, scale: f64, overlay_width: u32) -> (u3
         .max(1);
     let h = ((font_size * 3.1 + 6.0) * scale).round() as u32;
     (indent, w, h)
+}
+
+// ── 显示器工作区与「窗口跑到屏幕外」的兜底 ──────────────────────────────
+//
+// 记忆下来的窗口位置可能是已经不存在的显示器（拔掉副屏、改分辨率、笔记本外接转内置），
+// 弹幕窗会出现在屏幕外：看不见、拖不回来，设置页只能改尺寸。所以两处要处理：
+//   ① 启动恢复位置前校验一次中心点（`clamp_overlay_bounds`）；
+//   ② 界面上给一个显式入口（`reset_overlay_position` → 「移回主屏中央」按钮）。
+// 判定与夹取都写成纯函数，方便单测（带 AppHandle 的部分只负责取显示器信息）。
+
+/// 逻辑像素矩形（窗口位置 / 尺寸；配置里存的也是逻辑像素）
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Rect {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+impl Rect {
+    fn center(&self) -> (f64, f64) {
+        (self.x + self.w / 2.0, self.y + self.h / 2.0)
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        x >= self.x && x < self.x + self.w && y >= self.y && y < self.y + self.h
+    }
+}
+
+/// 显示器工作区 → 逻辑像素（按该显示器自己的缩放比换算）
+///
+/// 多屏且缩放不同时，这个换算只对「窗口真正所在的那块屏」精确；其它屏算不准也只是
+/// 让判据偏保守（误判成不可见 → 搬回主屏中央），不会把看得见的窗口搬到看不见的地方。
+fn logical_work_area(mon: &tauri::Monitor) -> Rect {
+    let scale = mon.scale_factor();
+    let wa = mon.work_area();
+    Rect {
+        x: wa.position.x as f64 / scale,
+        y: wa.position.y as f64 / scale,
+        w: wa.size.width as f64 / scale,
+        h: wa.size.height as f64 / scale,
+    }
+}
+
+/// 所有可见显示器的工作区（逻辑像素）
+fn logical_work_areas(app: &AppHandle) -> Vec<Rect> {
+    app.available_monitors()
+        .map(|mons| mons.iter().map(logical_work_area).collect())
+        .unwrap_or_default()
+}
+
+/// 主显示器工作区（逻辑像素）；取不到主显示器就退回第一块屏
+fn primary_logical_work_area(app: &AppHandle) -> Option<Rect> {
+    if let Ok(Some(mon)) = app.primary_monitor() {
+        return Some(logical_work_area(&mon));
+    }
+    app.available_monitors().ok()?.first().map(logical_work_area)
+}
+
+/// 主显示器工作区（物理像素）
+fn primary_work_area(app: &AppHandle) -> Option<tauri::PhysicalRect<i32, u32>> {
+    let mon = match app.primary_monitor() {
+        Ok(Some(mon)) => mon,
+        _ => app.available_monitors().ok()?.into_iter().next()?,
+    };
+    Some(*mon.work_area())
+}
+
+/// 窗口中心是否落在某块屏的工作区里
+///
+/// 判据用中心点而不是「有没有交集」：只要中心还在屏幕上，用户就看得见、也能拖得动它，
+/// 这时不做任何改动（半截露在屏幕外属于用户自己摆的位置，替他改反而更烦）。
+fn center_visible(bounds: Rect, work_areas: &[Rect]) -> bool {
+    let (cx, cy) = bounds.center();
+    work_areas.iter().any(|wa| wa.contains(cx, cy))
+}
+
+/// 把窗口放进工作区中央；窗口比工作区还大时按工作区收窄
+/// （收窄只发生在「已经跑到屏幕外」的兜底路径上，正常位置不会被改尺寸）
+fn centered_in(work: Rect, w: f64, h: f64) -> Rect {
+    let w = w.min(work.w);
+    let h = h.min(work.h);
+    Rect {
+        x: work.x + (work.w - w) / 2.0,
+        y: work.y + (work.h - h) / 2.0,
+        w,
+        h,
+    }
+}
+
+/// 尺寸夹进工作区（至少 1px，避免出现 0 宽窗口）
+fn fit_in_work_area(w: u32, h: u32, max_w: u32, max_h: u32) -> (u32, u32) {
+    (w.min(max_w).max(1), h.min(max_h).max(1))
+}
+
+/// 启动恢复位置前的校验：窗口中心不在任何屏幕里就搬回主显示器中央
+///
+/// 返回值直接喂给窗口构建器（逻辑像素）。屏幕列表都取不到时原样返回，不冒险改动。
+pub(crate) fn clamp_overlay_bounds(
+    app: &AppHandle,
+    bounds: config::WindowBounds,
+) -> config::WindowBounds {
+    let work_areas = logical_work_areas(app);
+    let rect = Rect {
+        x: bounds.x,
+        y: bounds.y,
+        w: bounds.w,
+        h: bounds.h,
+    };
+    if work_areas.is_empty() || center_visible(rect, &work_areas) {
+        return bounds;
+    }
+    let Some(primary) = primary_logical_work_area(app) else {
+        return bounds;
+    };
+    log::warn!(
+        "[overlay] 记忆的位置 ({:.0}, {:.0}) 不在任何屏幕的工作区内，搬回主显示器中央",
+        bounds.x,
+        bounds.y
+    );
+    let fixed = centered_in(primary, bounds.w, bounds.h);
+    config::WindowBounds {
+        x: fixed.x,
+        y: fixed.y,
+        w: fixed.w,
+        h: fixed.h,
+    }
+}
+
+/// 把弹幕窗搬回主显示器中央（「弹幕窗」标签的「移回主屏中央」按钮）
+///
+/// 用物理像素一次算好位置与尺寸：尺寸保持当前值，只有「比工作区还大」时才收窄，
+/// 保证搬完之后整块都在屏幕内。位置与尺寸的变更会照常触发窗口事件，
+/// bounds 捕获 / 落盘 / 发送框重新吸附都走既有那条路径，这里不重复做。
+pub(crate) fn reset_overlay_position(app: &AppHandle) -> Result<(), String> {
+    let win = overlay_window(app).ok_or("Overlay 窗口未创建")?;
+    let work = primary_work_area(app).ok_or("没有识别到可用的显示器")?;
+    let size = win
+        .outer_size()
+        .map_err(|e| format!("读取弹幕窗尺寸失败: {e}"))?;
+    let (w, h) = fit_in_work_area(size.width, size.height, work.size.width, work.size.height);
+    let x = work.position.x + (work.size.width.saturating_sub(w) / 2) as i32;
+    let y = work.position.y + (work.size.height.saturating_sub(h) / 2) as i32;
+    win.set_size(tauri::PhysicalSize::new(w, h))
+        .map_err(|e| format!("调整弹幕窗尺寸失败: {e}"))?;
+    win.set_position(tauri::PhysicalPosition::new(x, y))
+        .map_err(|e| format!("移动弹幕窗失败: {e}"))?;
+    log::info!("[overlay] 已把弹幕窗移回主屏中央：{w}×{h} @ ({x}, {y})");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    fn physical_work(x: i32, y: i32, w: u32, h: u32) -> tauri::PhysicalRect<i32, u32> {
+        tauri::PhysicalRect {
+            position: tauri::PhysicalPosition::new(x, y),
+            size: tauri::PhysicalSize::new(w, h),
+        }
+    }
+
+    #[test]
+    fn 中心在屏幕工作区内才算可见() {
+        let screens = [rect(0.0, 0.0, 1920.0, 1040.0)];
+        // 整块在正中间
+        assert!(center_visible(rect(500.0, 400.0, 700.0, 400.0), &screens));
+        // 半截露在外面，但中心还在屏幕里 → 不动它
+        assert!(center_visible(rect(-300.0, 800.0, 700.0, 400.0), &screens));
+        // 跑到屏幕右边外面
+        assert!(!center_visible(rect(1900.0, 100.0, 700.0, 400.0), &screens));
+        // 跑到屏幕下方（笔记本外接屏拔掉后常见的坐标）
+        assert!(!center_visible(rect(100.0, 1600.0, 700.0, 400.0), &screens));
+    }
+
+    #[test]
+    fn 副屏也算可见() {
+        let screens = [rect(0.0, 0.0, 1920.0, 1040.0), rect(1920.0, 0.0, 2560.0, 1440.0)];
+        assert!(center_visible(rect(2200.0, 300.0, 700.0, 400.0), &screens));
+        // 放在第二块屏负方向（屏幕在左边的情况）
+        let left_screens = [rect(0.0, 0.0, 1920.0, 1040.0), rect(-2560.0, 0.0, 2560.0, 1440.0)];
+        assert!(center_visible(rect(-2000.0, 300.0, 700.0, 400.0), &left_screens));
+    }
+
+    #[test]
+    fn 搬回中央时保留尺寸() {
+        let work = rect(0.0, 0.0, 1920.0, 1040.0);
+        assert_eq!(
+            centered_in(work, 700.0, 400.0),
+            rect(610.0, 320.0, 700.0, 400.0)
+        );
+    }
+
+    #[test]
+    fn 窗口比工作区还大时按工作区收窄() {
+        let work = rect(0.0, 0.0, 1280.0, 720.0);
+        assert_eq!(centered_in(work, 1600.0, 900.0), rect(0.0, 0.0, 1280.0, 720.0));
+    }
+
+    #[test]
+    fn 工作区有偏移时中央位置跟着偏移() {
+        // 右侧副屏：工作区从 x=1920 开始
+        let work = rect(1920.0, 0.0, 1600.0, 860.0);
+        assert_eq!(centered_in(work, 800.0, 400.0), rect(2320.0, 230.0, 800.0, 400.0));
+    }
+
+    #[test]
+    fn 尺寸夹取不会算出零宽窗口() {
+        assert_eq!(fit_in_work_area(3000, 2000, 1920, 1040), (1920, 1040));
+        assert_eq!(fit_in_work_area(700, 400, 1920, 1040), (700, 400));
+        assert_eq!(fit_in_work_area(0, 0, 1920, 1040), (1, 1));
+    }
+
+    #[test]
+    fn 发送框正常情况下就在弹幕窗下方() {
+        let work = physical_work(0, 0, 1920, 1040);
+        // 弹幕窗 700×400 @ (80, 80)，缩进 88，发送框 260×76
+        assert_eq!(
+            fit_docked_position(Some(work), 80, 80, 400, 88, 260, 76),
+            (168, 480)
+        );
+    }
+
+    #[test]
+    fn 弹幕窗贴屏幕底部时发送框翻到上方() {
+        let work = physical_work(0, 0, 1920, 1040);
+        // 弹幕窗底边 1040 = 工作区下沿，正下方放不下 → 翻到弹幕窗正上方
+        assert_eq!(
+            fit_docked_position(Some(work), 80, 900, 140, 88, 260, 76),
+            (168, 824)
+        );
+    }
+
+    #[test]
+    fn 上下都放不下时贴工作区下沿() {
+        let work = physical_work(0, 0, 1920, 1040);
+        // 弹幕窗比工作区还高：上方也放不下 → 贴下沿，宁可压住弹幕窗也要能用
+        assert_eq!(
+            fit_docked_position(Some(work), 0, 0, 1200, 88, 260, 76),
+            (88, 964)
+        );
+    }
+
+    #[test]
+    fn 弹幕窗跑到屏幕外时发送框夹回工作区内() {
+        let work = physical_work(0, 0, 1920, 1040);
+        // 弹幕窗在屏幕右边外面：发送框的 x 被夹回工作区右侧内部，y 仍按下方算
+        assert_eq!(
+            fit_docked_position(Some(work), 2000, 80, 400, 88, 260, 76),
+            (1660, 480)
+        );
+        // 弹幕窗在屏幕左边外面（负坐标）
+        assert_eq!(
+            fit_docked_position(Some(work), -500, 80, 400, 88, 260, 76),
+            (0, 480)
+        );
+    }
+
+    #[test]
+    fn 工作区在副屏时按副屏夹取() {
+        let work = physical_work(1920, 0, 1600, 860);
+        assert_eq!(
+            fit_docked_position(Some(work), 2000, 100, 400, 88, 260, 76),
+            (2088, 500)
+        );
+        // 副屏下沿是 860：放不下就翻到弹幕窗上方
+        assert_eq!(
+            fit_docked_position(Some(work), 2000, 760, 100, 88, 260, 76),
+            (2088, 684)
+        );
+    }
+
+    #[test]
+    fn 取不到显示器信息时按原样吸附() {
+        assert_eq!(
+            fit_docked_position(None, 80, 80, 400, 88, 260, 76),
+            (168, 480)
+        );
+    }
 }

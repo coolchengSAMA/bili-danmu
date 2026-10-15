@@ -94,6 +94,21 @@ async function setAudience(patch: Partial<{ showOnline: boolean; showRank: boole
   }
 }
 
+/**
+ * 把弹幕窗搬回主屏中央
+ *
+ * 换显示器 / 改分辨率 / 拔掉副屏之后，记忆的位置可能落在不存在的坐标上：
+ * 弹幕窗看不见、也拖不回来（设置页只能改宽高，没有位置入口），这是那条兜底路径的入口。
+ */
+async function resetPosition() {
+  errMsg.value = ''
+  try {
+    await invoke('overlay_reset_position')
+  } catch (e) {
+    fail(e)
+  }
+}
+
 onMounted(async () => {
   // 先在监听：读取尺寸与手动缩放都走同一条路，不必区分先后
   unlistenSize = await listen<{ width: number; height: number }>('overlay-size', e => {
@@ -175,6 +190,10 @@ onUnmounted(() => {
       </div>
     </SettingRow>
 
+    <SettingRow label="窗口位置">
+      <button type="button" class="ghost-btn" @click="resetPosition">移回主屏中央</button>
+    </SettingRow>
+
     <SettingRow label="显示在看人数">
       <input
         type="checkbox"
@@ -198,13 +217,31 @@ onUnmounted(() => {
 
     <p class="tip">
       关闭穿透后，可在弹幕窗上按住拖动、边缘调整大小；开启穿透后鼠标点击会落到弹幕窗下方的窗口。
-      位置和大小自动保存，下次启动恢复。
+      位置和大小自动保存，下次启动恢复。换了显示器、改了分辨率或拔掉副屏之后，若弹幕窗跑到看不见的地方，
+      点「移回主屏中央」把它搬回来（尺寸保持原样，只有比屏幕还大时才收窄）。
     </p>
   </div>
 </template>
 
 <style scoped>
 /* 滑块与数值标签见全局 src/styles/settings.css（.size-control / .value） */
+
+/* 次级按钮（与朗读页的「刷新」同一套观感）：位置兜底这类一次性动作用它，不抢主操作的视线 */
+.ghost-btn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: var(--text-dim);
+  background: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
 
 /* 只在本标签页内提示，不与页面顶部的样式/过滤保存提示混用 */
 .panel-error {

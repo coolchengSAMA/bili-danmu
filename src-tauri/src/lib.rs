@@ -25,7 +25,10 @@ use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-use window::{capture_overlay_bounds, flush_overlay_bounds, flush_sender_visible, sync_sender_docked};
+use window::{
+    capture_overlay_bounds, clamp_overlay_bounds, flush_overlay_bounds, flush_sender_visible,
+    sync_sender_docked,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -137,6 +140,9 @@ pub fn run() {
             .skip_taskbar(true)
             .shadow(false);
             if let Some(b) = cfg.overlay_bounds {
+                // 记忆的位置可能已经不在任何屏幕上（拔掉副屏 / 改分辨率 / 换缩放）：
+                // 先校验一遍中心点，越界就搬回主显示器中央，别让窗口出现在看不见的地方
+                let b = clamp_overlay_bounds(app.handle(), b);
                 win_builder = win_builder.position(b.x, b.y).inner_size(b.w, b.h);
             }
             if let Ok(win) = win_builder.build() {
@@ -346,6 +352,7 @@ pub fn run() {
             commands::overlay_set_audience,
             commands::overlay_get_size,
             commands::overlay_set_size,
+            commands::overlay_reset_position,
             update::check_update,
             update::open_url,
             commands::open_log_dir,
