@@ -65,6 +65,7 @@
   - **榜单语义（实测）**：= 此刻在房间里 ∩ 今天有贡献值的人，人一离开直播间 **≤20 秒**就掉榜，所以它是「实时在线榜」而不是当日累计榜；**潜水观众永远不在榜上**（B 站隐私边界），界面文案必须写清这一点
   - 节奏：复用 lib.rs 里那个 2 秒周期任务，每 15 跳（=30 秒）拉一次；**换房立刻拉一次**（`audience_room_changed`），失败静默 + 最短 5 秒重试（`AUDIENCE_RETRY_MIN_SECS`，避免接口风控时变成每 2 秒一次请求），成功后广播 `audience-update`
   - **布局契约**：`--audience-indent: 6.5em`（右侧整列宽）、`--audience-inset = --audience-indent − 0.35em`（面板底色让出的宽度）。`.panel` 用 `margin-right: var(--audience-inset)` 让出右列，内部两区**不做**反向拉回（左侧头衔列要拉回、右侧不拉回，这是两者的关键差别）；`window.rs` 的 `AUDIENCE_INDENT_EM` 与 `sender_layout_metrics` 必须同步（右侧列出现时面板变窄，发送框宽度按新面板宽度重算）
+  - **右列底色与面板同一份 `bgColor`**（即同一个 `bg_opacity` 设置）：`.audience-bg` 右边圆角、左边直角，同时 `.overlay-root.with-audience .panel` 去掉右侧圆角 → 两块拼成**一个连续圆角矩形**，接缝处只留 1px 淡分隔线；右列显示时弹幕/礼物区加 0.35em 右边距，正文不贴分隔线
   - **两个开关**（`OverlayStyle::show_online` / `show_rank`，默认都开）在「弹幕窗」标签页，走 `overlay_set_audience` 做 load-modify-save（**不要**提交整份 style：会覆盖「弹幕样式」页正在改的其它字段）；两个都关时 `.with-audience` 不生效 → inset 为 0、面板恢复满宽
   - 右列边界提示与缩放手柄：`.audience-band`（淡底 + 左虚线，鼠标移入才浮出，做法同 `.title-band`）+ `.resize-handle-east`。手柄放**窗口右缘**（9px，系统热区只有 3px）而**不是**虚线处：虚线那边压着「在看 123」，点文字会变成缩放
   - 舰队徽章抽成 `overlay/GuardChip.vue`：弹幕行 `MetaBadges` 与在线榜共用，**三档配色只留一处**（复制一份必然漂移，同「徽章列共用契约」）
