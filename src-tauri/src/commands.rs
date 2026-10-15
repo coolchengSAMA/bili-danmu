@@ -390,6 +390,25 @@ pub(crate) async fn send_danmaku(state: State<'_, AppState>, msg: String) -> Res
     bilibili::send::send_danmaku(&client, &cookies, room_id, msg).await
 }
 
+/// 查询「我的直播间」（主播版主界面优先展示；只需登录态，与当前是否已连接房间无关）
+///
+/// 接口匿名可调，故**不传登录 Cookie**（少一处凭据外发）：只用登录态里的 uid。
+#[tauri::command]
+pub(crate) async fn my_room_info(
+    state: State<'_, AppState>,
+) -> Result<Option<bilibili::live::MyRoomInfo>, String> {
+    let uid = {
+        let auth = state.auth.lock().unwrap();
+        match auth.as_ref() {
+            Some(a) => a.uid,
+            None => return Err("请先扫码登录后查看我的直播间".into()),
+        }
+    };
+
+    let client = bilibili::api::http_client();
+    bilibili::live::fetch_my_room(&client, uid).await
+}
+
 /// 查询「已关注且正在开播」的主播（主界面手动刷新；只需登录态，与当前是否已连接房间无关）
 #[tauri::command]
 pub(crate) async fn list_following_live(

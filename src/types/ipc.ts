@@ -216,6 +216,20 @@ export interface FollowingLive {
   room_id: number
 }
 
+/** 「我的直播间」（按登录 uid 查自己的房间；从未开播过为 null） */
+export interface MyRoomInfo {
+  /** 真实房间号（点击直连） */
+  room_id: number
+  /** 房间标题（未设置为空串） */
+  title: string
+  /** 0=未开播 1=直播中 2=轮播 */
+  live_status: number
+  /** 当前在线人数 */
+  online: number
+  /** 主播是否对观众隐藏了在线人数（隐藏时仍能拿到数值，界面据此换文案） */
+  online_hidden: boolean
+}
+
 /** 弹幕过滤配置（Rust ↔ Vue，事件名 danmaku-filter） */
 export interface DanmakuFilter {
   /** 只显示舰长（全部大航海）/ 房管弹幕 */

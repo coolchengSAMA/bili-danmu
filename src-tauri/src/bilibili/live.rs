@@ -174,3 +174,134 @@ async fn fetch_live_batch(
     }
     Ok(live)
 }
+
+/// 「我的直播间」信息（主播版主界面优先展示）
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MyRoomInfo {
+    /// 真实房间号（点击直连用）
+    pub room_id: u32,
+    /// 房间标题
+    pub title: String,
+    /// 0=未开播 1=直播中 2=轮播
+    pub live_status: i64,
+    /// 当前在线人数
+    pub online: i64,
+    /// 主播是否对观众隐藏了在线人数（隐藏时接口仍给值，前端据此决定怎么显示）
+    pub online_hidden: bool,
+}
+
+/// 按 uid 查自己的直播间；账号从未开播过（接口不给 roomid）时返回 `None`
+///
+/// 用 `room/v1/Room/getRoomInfoOld?mid=<uid>`：**匿名可调**（实测无需登录态、无需 WBI），
+/// 一次就拿到真实房间号、标题、开播状态与在线人数。
+///
+/// 注意**不要**改成 `room/v1/Room/room_init?id=<uid>`：**靓号主播的 uid ≠ 房间号**
+/// （实测：uid 391365058 的房间是 25627030），把 uid 当房间号查会得到 `code=60004 房间不存在`。
+pub async fn fetch_my_room(
+    client: &reqwest::Client,
+    uid: i64,
+) -> Result<Option<MyRoomInfo>, String> {
+    let resp = client
+        .get("https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld")
+        .query(&[("mid", uid.to_string())])
+        .send()
+        .await
+        .map_err(|e| format!("请求我的直播间失败: {e}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("我的直播间响应解析失败: {e}"))?;
+    parse_my_room(&resp)
+}
+
+/// 解析 `getRoomInfoOld` 响应（抽出来便于单测，不依赖网络）
+fn parse_my_room(resp: &serde_json::Value) -> Result<Option<MyRoomInfo>, String> {
+    let code = resp.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
+    if code != 0 {
+        return Err(format!(
+            "获取我的直播间失败(code={code}): {}",
+            resp.get("message").and_then(|m| m.as_str()).unwrap_or("")
+        ));
+    }
+    let Some(data) = resp.get("data").filter(|d| !d.is_null()) else {
+        return Ok(None);
+    };
+    let room_id = data.get("roomid").and_then(|v| v.as_u64()).unwrap_or(0);
+    // 从未开播过的账号没有直播间：不是错误，交给前端提示
+    if room_id == 0 {
+        return Ok(None);
+    }
+    // 实测字段是 camelCase（liveStatus），旧文档里写过 snake_case，两种都认
+    let live_status = data
+        .get("liveStatus")
+        .or_else(|| data.get("live_status"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    Ok(Some(MyRoomInfo {
+        room_id: room_id as u32,
+        title: data
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        live_status,
+        online: data.get("online").and_then(|v| v.as_i64()).unwrap_or(0),
+        online_hidden: data
+            .get("online_hidden")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn 我的直播间解析驼峰开播字段() {
+        let v = json!({
+            "code": 0,
+            "data": {
+                "roomid": 25627030,
+                "title": "直播测试",
+                "liveStatus": 1,
+                "online": 42,
+                "online_hidden": true
+            }
+        });
+        let info = parse_my_room(&v).unwrap().unwrap();
+        assert_eq!(info.room_id, 25627030);
+        assert_eq!(info.title, "直播测试");
+        assert_eq!(info.live_status, 1);
+        assert_eq!(info.online, 42);
+        assert!(info.online_hidden);
+    }
+
+    #[test]
+    fn 我的直播间兼容下划线开播字段() {
+        let v = json!({ "code": 0, "data": { "roomid": 1, "live_status": 2 } });
+        let info = parse_my_room(&v).unwrap().unwrap();
+        assert_eq!(info.live_status, 2);
+        // 缺字段时给安全默认值：未开播 / 0 人 / 未隐藏
+        assert_eq!(info.online, 0);
+        assert!(!info.online_hidden);
+        assert_eq!(info.title, "");
+    }
+
+    #[test]
+    fn 我的直播间缺房间号时返回空() {
+        // 从未开播过的账号：roomid 为 0 或整个 data 缺失，都不是错误
+        assert!(parse_my_room(&json!({ "code": 0, "data": { "roomid": 0 } }))
+            .unwrap()
+            .is_none());
+        assert!(parse_my_room(&json!({ "code": 0, "data": null }))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn 我的直播间非零返回码报错() {
+        let e = parse_my_room(&json!({ "code": -101, "message": "账号未登录" })).unwrap_err();
+        assert!(e.contains("-101") && e.contains("账号未登录"));
+    }
+}
