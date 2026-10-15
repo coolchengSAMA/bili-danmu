@@ -59,7 +59,7 @@
   <img src="./imgs/弹幕设置.webp" width="49%" alt="弹幕设置">
 </p>
 
-<p align="center">左：扫码登录（登录信息只存本机）　右：字号、行距、字体、背景不透明度、测试弹幕</p>
+<p align="center">左：扫码登录（登录信息只存本机；图中二维码已打码）　右：字号、行距、字体、背景不透明度、测试弹幕</p>
 
 <p align="center">
   <img src="./imgs/朗读设置.webp" width="49%" alt="朗读设置">
