@@ -125,8 +125,13 @@ impl Default for DanmakuFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TtsConfig {
-    /// 总开关
+    /// 弹幕朗读开关（只影响弹幕；礼物 / 欢迎朗读各自有开关，但都受 `master_enabled` 管）
     pub enabled: bool,
+    /// 全部朗读总开关（弹幕 / 礼物 / 欢迎一起管；设置页「试听」除外）
+    ///
+    /// 与 `enabled` 是**两个维度**：关掉 `enabled` 只停弹幕（礼物照念，保持上游语义）；
+    /// 关掉这里才是「全部静音」。旧配置没有该字段 → 结构体级 `#[serde(default)]` 取 `true`。
+    pub master_enabled: bool,
     /// Edge TTS 音色名（如 zh-CN-XiaoxiaoNeural）
     pub voice: String,
     /// 语速百分比偏移（-50 = 半速，+50 = 1.5 倍速）
@@ -153,6 +158,8 @@ impl Default for TtsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            // 默认开着总闸：旧配置没有该字段时靠它补齐，行为与「只有弹幕朗读开关」的老版本一致
+            master_enabled: true,
             voice: "zh-CN-XiaoxiaoNeural".into(),
             rate_pct: 0,
             volume_pct: 0,

@@ -314,8 +314,10 @@ export interface TtsVoice {
 
 /** TTS 弹幕朗读配置（Rust ↔ Vue） */
 export interface TtsConfig {
-  /** 总开关 */
+  /** 弹幕朗读开关（只影响弹幕；礼物 / 欢迎各有开关，但都受 `master_enabled` 管） */
   enabled: boolean
+  /** 全部朗读总开关（弹幕 / 礼物 / 欢迎一起管；设置页「试听」除外） */
+  master_enabled: boolean
   /** Edge TTS 音色名 */
   voice: string
   /** 语速百分比偏移（-50 = 半速，+50 = 1.5 倍速） */
@@ -349,9 +351,20 @@ export interface DashboardStatus {
     always_on_top: boolean
   }
   tts: {
+    /** 全部朗读总开关 */
+    master_enabled: boolean
+    /** 弹幕朗读开关 */
     enabled: boolean
     /** 朗读筛选条件（与显示筛选相互独立） */
     filter: DanmakuFilter
+  }
+  /** 礼物朗读开关（`GiftTtsConfig::enabled`） */
+  gift_tts: {
+    enabled: boolean
+  }
+  /** 欢迎信息配置里与朗读相关的那一位（`WelcomeConfig::tts_guard`） */
+  welcome: {
+    tts_guard: boolean
   }
   /** 最近 10 秒接收到的弹幕条数 */
   danmaku_rate: number
@@ -360,6 +373,7 @@ export interface DashboardStatus {
 /** TTS 默认配置 */
 export const DEFAULT_TTS_CONFIG: TtsConfig = {
   enabled: false,
+  master_enabled: true,
   voice: 'zh-CN-XiaoxiaoNeural',
   rate_pct: 0,
   volume_pct: 0,

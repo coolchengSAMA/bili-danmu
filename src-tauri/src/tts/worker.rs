@@ -46,8 +46,8 @@ pub fn spawn_worker(app: AppHandle) {
             let manual = chunk.manual;
             {
                 let state = player_app.state::<TtsState>();
-                // 总开关关掉后，除手动试听外一律不出声（礼物 / 欢迎朗读也不再豁免）
-                if !manual && !state.is_enabled() {
+                // 闸门与入队一致：试听永远读；礼物 / 欢迎只看总开关；弹幕还要看弹幕朗读开关
+                if !state.allowed(force, manual) {
                     continue;
                 }
                 // 礼物朗读与试听不参与打断作废（它们在队列里，被弹幕顶掉会白合成一条）
@@ -64,7 +64,7 @@ pub fn spawn_worker(app: AppHandle) {
                     || epoch != play_app.state::<TtsState>().epoch.load(Ordering::Relaxed);
                 // 只有「关掉朗读总开关」才立刻停下；被打断的只是还没开播的音频
                 // （见 interrupt_if_backlogged）。唯一豁免是手动试听（`manual`）
-                let stop_now = || !manual && !play_app.state::<TtsState>().is_enabled();
+                let stop_now = || !play_app.state::<TtsState>().allowed(force, manual);
                 super::player::play_mp3(&data, expired, stop_now)
             })
             .await;
@@ -84,9 +84,8 @@ pub fn spawn_worker(app: AppHandle) {
         loop {
             let item = app.state::<TtsState>().pop().await;
             let config = app.state::<TtsState>().config();
-            // 关闭期间积压的项在重新开启后不再补读（手动试听除外；总开关关掉时队列里
-            // 本来也只剩试听，这里是兜底）
-            if !config.enabled && !item.manual {
+            // 闸门与入队 / 播放一致：关闭期间积压的项在重新开启后不再补读（试听除外）
+            if !app.state::<TtsState>().allowed(item.force, item.manual) {
                 continue;
             }
             let epoch = app.state::<TtsState>().epoch.load(Ordering::Relaxed);
@@ -102,10 +101,10 @@ pub fn spawn_worker(app: AppHandle) {
                     let state = app.state::<TtsState>();
                     // 弹幕在合成期间可能已被关掉或被打断，丢弃过期产物，别出声音；
                     // 礼物朗读与试听（`force`）不参与打断：一旦入队就念完
-                    // 手动试听永远播；其它项要求总开关仍开着（合成期间可能被关掉），
-                    // 而「被打断」只对普通弹幕生效（force 项不参与打断作废）
+                    // 合成期间开关可能被关掉：闸门统一走 `allowed`（试听永远播；礼物 / 欢迎只看
+                    // 总开关；弹幕还要看弹幕朗读开关）。「被打断」只对普通弹幕生效。
                     let keep = item.manual
-                        || (state.config().enabled
+                        || (state.allowed(item.force, false)
                             && (item.force || state.epoch.load(Ordering::Relaxed) == epoch));
                     drop(state);
                     if keep

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import { useSaveTip } from '../composables/useSaveTip'
 import ToggleSwitch from './ToggleSwitch.vue'
@@ -10,14 +10,17 @@ import type { DanmakuFilter, DashboardStatus } from '../types/ipc'
 
 // 运行状态 + 快捷开关。
 //
-// 状态按秒轮询 Rust 的 `get_dashboard_status`（单一快照），开关命令成功后立即刷新一次；
-// **不在前端各存一份开关状态**——同一组状态在「弹幕设置 → 弹幕窗」「朗读设置」页还有入口，
-// 各存一份必然漂移（这正是以前这块只敢做只读的原因）。另监听 Rust 广播做即时同步，轮询兜底。
+// 状态按秒轮询 Rust 的 `get_dashboard_status`（单一快照），开关命令成功后由广播 / 下一次轮询
+// 回写；**不在前端各存一份开关状态**——同一组开关在设置页还有入口，各存一份必然漂移
+// （这正是以前这块只敢做只读的原因）。
 const { showError } = useSaveTip()
 
 const status = ref<DashboardStatus | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 const unlistens: UnlistenFn[] = []
+
+/** 总开关关掉时，三个分类开关置灰（仍显示当前值，方便看出重新打开后会是什么状态） */
+const masterOn = computed(() => status.value?.tts.master_enabled ?? false)
 
 async function refresh() {
   try {
@@ -30,7 +33,7 @@ async function refresh() {
 /**
  * 快捷开关：先乐观更新（点下去立刻有反馈），失败回滚并提示
  *
- * 状态最终仍以 Rust 为准（下一次轮询 / 广播会覆盖乐观值）。
+ * 状态最终仍以 Rust 为准（广播 / 下一次轮询会覆盖乐观值）。
  */
 async function toggleOverlay(key: 'visible' | 'clickthrough' | 'alwaysOnTop') {
   const overlay = status.value?.overlay
@@ -51,16 +54,40 @@ async function toggleOverlay(key: 'visible' | 'clickthrough' | 'alwaysOnTop') {
   }
 }
 
-/** 朗读总开关：弹幕 / 礼物 / 欢迎一起管（试听不受影响） */
-async function toggleTts() {
-  const tts = status.value?.tts
-  if (!tts) return
-  const next = !tts.enabled
-  tts.enabled = next
+type TtsSwitch = 'master' | 'danmaku' | 'gift' | 'welcome'
+
+/**
+ * 朗读开关（四个：总开关 + 弹幕 / 礼物 / 欢迎）
+ *
+ * 两维模型：总开关管「要不要出声」，三个分类开关管「哪一类出声」，分类开关只在总开关
+ * 打开时生效。命令都是单字段的，避免整份 `TtsConfig` 回传覆盖别处刚改的配置。
+ */
+async function toggleTts(which: TtsSwitch) {
+  const st = status.value
+  if (!st) return
+  const read = () =>
+    which === 'master'
+      ? st.tts.master_enabled
+      : which === 'danmaku'
+        ? st.tts.enabled
+        : which === 'gift'
+          ? st.gift_tts.enabled
+          : st.welcome.tts_guard
+  const write = (v: boolean) => {
+    if (which === 'master') st.tts.master_enabled = v
+    else if (which === 'danmaku') st.tts.enabled = v
+    else if (which === 'gift') st.gift_tts.enabled = v
+    else st.welcome.tts_guard = v
+  }
+  const prev = read()
+  write(!prev)
   try {
-    await invoke('tts_set_enabled', { enabled: next })
+    if (which === 'master') await invoke('tts_set_master_enabled', { enabled: !prev })
+    else if (which === 'danmaku') await invoke('tts_set_danmaku_enabled', { enabled: !prev })
+    else if (which === 'gift') await invoke('gift_tts_set_enabled', { enabled: !prev })
+    else await invoke('welcome_tts_set_enabled', { enabled: !prev })
   } catch (e) {
-    tts.enabled = !next
+    write(prev)
     showError(e)
   }
 }
@@ -79,8 +106,16 @@ onMounted(async () => {
     await listen<boolean>('overlay-always-on-top', e => {
       if (status.value) status.value.overlay.always_on_top = e.payload
     }),
-    await listen<boolean>('tts-enabled', e => {
-      if (status.value) status.value.tts.enabled = e.payload
+    await listen<{ master_enabled: boolean; enabled: boolean }>('tts-switches', e => {
+      if (!status.value) return
+      status.value.tts.master_enabled = e.payload.master_enabled
+      status.value.tts.enabled = e.payload.enabled
+    }),
+    await listen<boolean>('gift-tts-enabled', e => {
+      if (status.value) status.value.gift_tts.enabled = e.payload
+    }),
+    await listen<boolean>('welcome-tts-enabled', e => {
+      if (status.value) status.value.welcome.tts_guard = e.payload
     }),
   )
 })
@@ -141,17 +176,44 @@ function filterSummary(f: DanmakuFilter): string {
         <div class="quick">
           <div class="quick-row">
             <span class="quick-label">全部朗读</span>
-            <ToggleSwitch :model-value="status?.tts.enabled ?? false" @change="toggleTts()" />
+            <ToggleSwitch :model-value="status?.tts.master_enabled ?? false" @change="toggleTts('master')" />
+          </div>
+          <div class="quick-row">
+            <span class="quick-label">弹幕朗读</span>
+            <ToggleSwitch
+              :disabled="!masterOn"
+              :model-value="status?.tts.enabled ?? false"
+              @change="toggleTts('danmaku')" />
+          </div>
+          <div class="quick-row">
+            <span class="quick-label">礼物朗读</span>
+            <ToggleSwitch
+              :disabled="!masterOn"
+              :model-value="status?.gift_tts.enabled ?? false"
+              @change="toggleTts('gift')" />
+          </div>
+          <div class="quick-row">
+            <span class="quick-label">欢迎朗读</span>
+            <ToggleSwitch
+              :disabled="!masterOn"
+              :model-value="status?.welcome.tts_guard ?? false"
+              @change="toggleTts('welcome')" />
           </div>
         </div>
         <div class="card-sub">
-          {{ status && status.tts.enabled ? filterSummary(status.tts.filter) : '弹幕 / 礼物 / 欢迎都不念' }}
+          {{
+            masterOn
+              ? status && status.tts.enabled
+                ? filterSummary(status.tts.filter)
+                : '弹幕朗读已关'
+              : '全部朗读已关闭（设置页试听除外）'
+          }}
         </div>
       </div>
     </div>
     <p class="dashboard-tip">
-      快捷开关与「弹幕设置」「朗读设置」页是同一份状态。朗读关掉后弹幕 / 礼物 / 欢迎都不出声（设置页的「试听」除外）；
-      穿透与置顶只对本次运行生效，重启回到默认（不穿透、置顶开）。
+      快捷开关与「朗读设置」「主播分区」页是同一份状态。「全部朗读」是总开关，下面三个是分类开关（关掉弹幕朗读不影响礼物
+      / 欢迎朗读）。试听不受这里影响；穿透与置顶只对本次运行生效，重启回到默认（不穿透、置顶开）。
     </p>
   </div>
 </template>

@@ -20,12 +20,13 @@ const { config, voices, testing, loadingVoices, customVoice, save, testSpeak, re
   showError,
 )
 
-// 朗读总开关还有第二个入口（直播间页「运行状态」里的快捷开关）：那边改了要同步过来，
+// 总开关 / 弹幕朗读还有第二个入口（直播间页「运行状态」里的快捷开关）：那边改了要同步过来，
 // 否则这里显示的还是旧状态、再改一次配置就把对方刚改的值覆盖回去
 let unlistenTts: UnlistenFn | undefined
 onMounted(async () => {
-  unlistenTts = await listen<boolean>('tts-enabled', e => {
-    config.value.enabled = e.payload
+  unlistenTts = await listen<{ master_enabled: boolean; enabled: boolean }>('tts-switches', e => {
+    config.value.master_enabled = e.payload.master_enabled
+    config.value.enabled = e.payload.enabled
   })
 })
 
@@ -58,15 +59,25 @@ function applyFilter(next: DanmakuFilter) {
 
     <section v-show="tab === 'engine'" class="tab-pane">
       <div class="setting-card">
-        <SettingRow label="朗读总开关">
-          <ToggleSwitch v-model="config.enabled" @change="save()" />
+        <SettingRow label="全部朗读（总开关）">
+          <ToggleSwitch v-model="config.master_enabled" @change="save()" />
         </SettingRow>
 
         <p class="tip">
-          关掉后
-          <b>一切自动朗读</b>
-          都停止：弹幕、礼物打赏、欢迎信息都不再出声（队列里排着的也一并丢掉、正在念的立刻停）。
-          各功能自己的开关是第二道闸，总开关关着时它们不生效。 下面的「试听」不受总开关影响——调音色时随时能听。
+          <b>总开关</b>
+          管住一切自动朗读：关掉后弹幕、礼物打赏、欢迎信息都不再出声（队列里排着的也一并丢掉、正在念的立刻停）。
+          下面（以及「主播分区」里的礼物 / 欢迎朗读）是分类开关，只在总开关打开时生效。
+          下面的「试听」不受总开关影响——调音色时随时能听。
+        </p>
+
+        <SettingRow label="弹幕朗读">
+          <ToggleSwitch v-model="config.enabled" :disabled="!config.master_enabled" @change="save()" />
+        </SettingRow>
+
+        <p class="tip">
+          关掉只停弹幕，
+          <b>礼物朗读与欢迎朗读照常念</b>
+          （它们的开关在「主播分区」）。这是「只读打赏、不读弹幕」的用法。
         </p>
 
         <SettingRow label="音色">

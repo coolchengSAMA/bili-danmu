@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref } from 'vue'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 import SettingRow from '../components/SettingRow.vue'
 import ToggleSwitch from '../components/ToggleSwitch.vue'
@@ -25,6 +26,10 @@ const giftTts = ref<GiftTtsConfig>({ ...DEFAULT_GIFT_TTS_CONFIG })
 const welcome = ref<WelcomeConfig>({ ...DEFAULT_WELCOME_CONFIG })
 
 const { showSaved, showError } = useSaveTip()
+
+// 两个监听句柄：直播间页快捷开关改了礼物 / 欢迎朗读时同步过来（见 onMounted 里的说明）
+let unlistenGiftTts: UnlistenFn | undefined
+let unlistenWelcomeTts: UnlistenFn | undefined
 
 async function apply() {
   // 数字输入框可能被清空或填成负数，统一收敛到 0 再下发（0 = 不限）
@@ -67,6 +72,19 @@ onMounted(async () => {
   } catch (e) {
     console.error('读取礼物配置失败', e)
   }
+  // 礼物 / 欢迎朗读还有第二个入口（直播间页「运行状态」里的快捷开关）：
+  // 那边改了要同步过来，否则这里显示旧状态、再保存一次就把对方的改动覆盖回去
+  unlistenGiftTts = await listen<boolean>('gift-tts-enabled', e => {
+    giftTts.value.enabled = e.payload
+  })
+  unlistenWelcomeTts = await listen<boolean>('welcome-tts-enabled', e => {
+    welcome.value.tts_guard = e.payload
+  })
+})
+
+onUnmounted(() => {
+  unlistenGiftTts?.()
+  unlistenWelcomeTts?.()
 })
 </script>
 

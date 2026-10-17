@@ -166,7 +166,10 @@ pub(crate) fn get_dashboard_status(app: AppHandle) -> serde_json::Value {
         })
     };
 
-    let tts = app.state::<tts::TtsState>().config();
+    let tts_state = app.state::<tts::TtsState>();
+    let tts = tts_state.config();
+    let gift_tts = tts_state.gift_config();
+    let welcome = app.state::<OverlayState>().welcome.lock().unwrap().clone();
 
     let now = Instant::now();
     let danmaku_rate = {
@@ -178,7 +181,13 @@ pub(crate) fn get_dashboard_status(app: AppHandle) -> serde_json::Value {
 
     json!({
         "overlay": overlay,
-        "tts": { "enabled": tts.enabled, "filter": tts.filter },
+        "tts": {
+            "master_enabled": tts.master_enabled,
+            "enabled": tts.enabled,
+            "filter": tts.filter,
+        },
+        "gift_tts": { "enabled": gift_tts.enabled },
+        "welcome": { "tts_guard": welcome.tts_guard },
         "danmaku_rate": danmaku_rate,
     })
 }
@@ -522,27 +531,83 @@ pub(crate) fn tts_set_config(
 ) -> Result<(), String> {
     state.set_config(tts.clone());
     config::save_tts_config(&app, &tts)?;
-    // 广播总开关：直播间页快捷开关与「朗读设置」页的开关要互相同步
-    let _ = app.emit("tts-enabled", tts.enabled);
+    emit_tts_switches(&app, &tts);
     Ok(())
 }
 
-/// 朗读总开关（弹幕 / 礼物 / 欢迎一切自动朗读一起管；试听不受影响）
+/// 广播朗读开关的当前值：直播间页快捷开关与「朗读设置」页要互相同步
+fn emit_tts_switches(app: &AppHandle, tts: &config::TtsConfig) {
+    let _ = app.emit(
+        "tts-switches",
+        json!({ "master_enabled": tts.master_enabled, "enabled": tts.enabled }),
+    );
+}
+
+/// 只改一个开关并落盘：`state.set_config` 会按新状态清队列 / 作废在途音频
 ///
-/// 单独一条命令而不是让前端提交整份 `TtsConfig`：直播间页快捷开关与「朗读设置」页
-/// 可能同时改配置（一个切总开关、一个调音色），回传整份对象会把对方的改动覆盖掉。
-/// 这里只改 `enabled` 一个字段，其余字段沿用内存态（与磁盘一致）。
+/// 做成单字段命令而不是让前端提交整份 `TtsConfig`：直播间页快捷开关与「朗读设置」页
+/// 可能同时改配置（一个切开关、一个调音色），回传整份对象会把对方的改动覆盖掉。
+fn save_switches(
+    app: &AppHandle,
+    state: &tts::TtsState,
+    config: config::TtsConfig,
+) -> Result<(), String> {
+    state.set_config(config.clone());
+    config::save_tts_config(app, &config)?;
+    emit_tts_switches(app, &config);
+    Ok(())
+}
+
+/// 全部朗读总开关（弹幕 / 礼物 / 欢迎一起管；设置页「试听」除外）
 #[tauri::command]
-pub(crate) fn tts_set_enabled(
+pub(crate) fn tts_set_master_enabled(
+    app: AppHandle,
+    state: State<'_, tts::TtsState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    let mut config = state.config();
+    config.master_enabled = enabled;
+    save_switches(&app, &state, config)?;
+    Ok(enabled)
+}
+
+/// 弹幕朗读开关（只影响弹幕；礼物 / 欢迎朗读不受它影响，但都受总开关管）
+#[tauri::command]
+pub(crate) fn tts_set_danmaku_enabled(
     app: AppHandle,
     state: State<'_, tts::TtsState>,
     enabled: bool,
 ) -> Result<bool, String> {
     let mut config = state.config();
     config.enabled = enabled;
-    state.set_config(config.clone());
-    config::save_tts_config(&app, &config)?;
-    let _ = app.emit("tts-enabled", enabled);
+    save_switches(&app, &state, config)?;
+    Ok(enabled)
+}
+
+/// 礼物朗读开关（与弹幕朗读互不影响；总开关关着时同样不念）
+#[tauri::command]
+pub(crate) fn gift_tts_set_enabled(
+    app: AppHandle,
+    state: State<'_, tts::TtsState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    let mut cfg = state.gift_config();
+    cfg.enabled = enabled;
+    state.set_gift_config(cfg.clone());
+    config::save_gift_tts_config(&app, &cfg)?;
+    let _ = app.emit("gift-tts-enabled", enabled);
+    Ok(enabled)
+}
+
+/// 欢迎信息朗读开关（只念舰长进场；与弹幕朗读互不影响，但都受总开关管）
+#[tauri::command]
+pub(crate) fn welcome_tts_set_enabled(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    let state = app.state::<OverlayState>();
+    let mut welcome = state.welcome.lock().unwrap().clone();
+    welcome.tts_guard = enabled;
+    *state.welcome.lock().unwrap() = welcome.clone();
+    config::save_welcome_config(&app, &welcome)?;
+    let _ = app.emit("welcome-tts-enabled", enabled);
     Ok(enabled)
 }
 
