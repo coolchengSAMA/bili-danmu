@@ -149,6 +149,8 @@ pub(crate) fn overlay_set_always_on_top(
     win.set_always_on_top(enabled)
         .map_err(|e| format!("设置置顶失败: {e}"))?;
     *state.always_on_top.lock().unwrap() = enabled;
+    // 广播：置顶开关有两个入口（「弹幕窗」标签、直播间页快捷开关），另一侧要跟着更新
+    let _ = app.emit("overlay-always-on-top", enabled);
     Ok(enabled)
 }
 
@@ -519,7 +521,29 @@ pub(crate) fn tts_set_config(
     tts: config::TtsConfig,
 ) -> Result<(), String> {
     state.set_config(tts.clone());
-    config::save_tts_config(&app, &tts)
+    config::save_tts_config(&app, &tts)?;
+    // 广播总开关：直播间页快捷开关与「朗读设置」页的开关要互相同步
+    let _ = app.emit("tts-enabled", tts.enabled);
+    Ok(())
+}
+
+/// 朗读总开关（弹幕 / 礼物 / 欢迎一切自动朗读一起管；试听不受影响）
+///
+/// 单独一条命令而不是让前端提交整份 `TtsConfig`：直播间页快捷开关与「朗读设置」页
+/// 可能同时改配置（一个切总开关、一个调音色），回传整份对象会把对方的改动覆盖掉。
+/// 这里只改 `enabled` 一个字段，其余字段沿用内存态（与磁盘一致）。
+#[tauri::command]
+pub(crate) fn tts_set_enabled(
+    app: AppHandle,
+    state: State<'_, tts::TtsState>,
+    enabled: bool,
+) -> Result<bool, String> {
+    let mut config = state.config();
+    config.enabled = enabled;
+    state.set_config(config.clone());
+    config::save_tts_config(&app, &config)?;
+    let _ = app.emit("tts-enabled", enabled);
+    Ok(enabled)
 }
 
 /// 试听当前音色/语速（不受总开关限制）

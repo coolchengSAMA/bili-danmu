@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
@@ -18,6 +19,17 @@ const { config, voices, testing, loadingVoices, customVoice, save, testSpeak, re
   showSaved,
   showError,
 )
+
+// 朗读总开关还有第二个入口（直播间页「运行状态」里的快捷开关）：那边改了要同步过来，
+// 否则这里显示的还是旧状态、再改一次配置就把对方刚改的值覆盖回去
+let unlistenTts: UnlistenFn | undefined
+onMounted(async () => {
+  unlistenTts = await listen<boolean>('tts-enabled', e => {
+    config.value.enabled = e.payload
+  })
+})
+
+onUnmounted(() => unlistenTts?.())
 
 function applyFilter(next: DanmakuFilter) {
   config.value.filter = next
@@ -46,9 +58,16 @@ function applyFilter(next: DanmakuFilter) {
 
     <section v-show="tab === 'engine'" class="tab-pane">
       <div class="setting-card">
-        <SettingRow label="开启弹幕朗读">
+        <SettingRow label="朗读总开关">
           <ToggleSwitch v-model="config.enabled" @change="save()" />
         </SettingRow>
+
+        <p class="tip">
+          关掉后
+          <b>一切自动朗读</b>
+          都停止：弹幕、礼物打赏、欢迎信息都不再出声（队列里排着的也一并丢掉、正在念的立刻停）。
+          各功能自己的开关是第二道闸，总开关关着时它们不生效。 下面的「试听」不受总开关影响——调音色时随时能听。
+        </p>
 
         <SettingRow label="音色">
           <div class="voice-control">

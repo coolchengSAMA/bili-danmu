@@ -345,6 +345,7 @@ pub fn run() {
             commands::welcome_set_config,
             commands::tts_get_config,
             commands::tts_set_config,
+            commands::tts_set_enabled,
             commands::tts_test_speak,
             commands::tts_list_voices,
             commands::tts_refresh_voices,

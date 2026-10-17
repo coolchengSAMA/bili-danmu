@@ -25,6 +25,8 @@ let unlistenSize: UnlistenFn | undefined
 // 开关从发送框那一侧被改动时由 Rust 广播过来（两个入口必须双向同步）
 let unlistenVisible: UnlistenFn | undefined
 let unlistenClickthrough: UnlistenFn | undefined
+// 置顶还有第二个入口（直播间页「运行状态」快捷开关）：那边改了要跟着变
+let unlistenAlwaysOnTop: UnlistenFn | undefined
 
 /**
  * 统一动作包装：成功 → 右下角浮层「已应用并保存」，失败 → 同一浮层显示原因
@@ -109,6 +111,9 @@ onMounted(async () => {
   unlistenClickthrough = await listen<boolean>('overlay-clickthrough', e => {
     ov.value.clickthrough = e.payload
   })
+  unlistenAlwaysOnTop = await listen<boolean>('overlay-always-on-top', e => {
+    ov.value.alwaysOnTop = e.payload
+  })
   try {
     winSize.value = await invoke<{ width: number; height: number }>('overlay_get_size')
   } catch (e) {
@@ -133,6 +138,7 @@ onUnmounted(() => {
   unlistenSize?.()
   unlistenVisible?.()
   unlistenClickthrough?.()
+  unlistenAlwaysOnTop?.()
 })
 </script>
 

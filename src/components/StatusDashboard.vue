@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-// 状态仪表盘：只读展示弹幕窗/朗读/速率状态，按秒轮询 Rust 聚合命令
-// （开关本身分散在「弹幕」「朗读」页，这里不提供操作入口，避免两份状态不同步）
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { onMounted, onUnmounted, ref } from 'vue'
+
+import { useSaveTip } from '../composables/useSaveTip'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 import type { DanmakuFilter, DashboardStatus } from '../types/ipc'
 
+// 运行状态 + 快捷开关。
+//
+// 状态按秒轮询 Rust 的 `get_dashboard_status`（单一快照），开关命令成功后立即刷新一次；
+// **不在前端各存一份开关状态**——同一组状态在「弹幕设置 → 弹幕窗」「朗读设置」页还有入口，
+// 各存一份必然漂移（这正是以前这块只敢做只读的原因）。另监听 Rust 广播做即时同步，轮询兜底。
+const { showError } = useSaveTip()
+
 const status = ref<DashboardStatus | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
+const unlistens: UnlistenFn[] = []
 
 async function refresh() {
   try {
@@ -17,13 +27,67 @@ async function refresh() {
   }
 }
 
-onMounted(() => {
+/**
+ * 快捷开关：先乐观更新（点下去立刻有反馈），失败回滚并提示
+ *
+ * 状态最终仍以 Rust 为准（下一次轮询 / 广播会覆盖乐观值）。
+ */
+async function toggleOverlay(key: 'visible' | 'clickthrough' | 'alwaysOnTop') {
+  const overlay = status.value?.overlay
+  if (!overlay) return
+  const next = !overlay[key]
+  overlay[key] = next
+  try {
+    if (key === 'visible') {
+      await invoke('overlay_set_visible', { visible: next })
+    } else if (key === 'clickthrough') {
+      await invoke('overlay_set_clickthrough', { enabled: next })
+    } else {
+      await invoke('overlay_set_always_on_top', { enabled: next })
+    }
+  } catch (e) {
+    overlay[key] = !next
+    showError(e)
+  }
+}
+
+/** 朗读总开关：弹幕 / 礼物 / 欢迎一起管（试听不受影响） */
+async function toggleTts() {
+  const tts = status.value?.tts
+  if (!tts) return
+  const next = !tts.enabled
+  tts.enabled = next
+  try {
+    await invoke('tts_set_enabled', { enabled: next })
+  } catch (e) {
+    tts.enabled = !next
+    showError(e)
+  }
+}
+
+onMounted(async () => {
   void refresh()
   timer = setInterval(refresh, 1000)
+  // 广播优先于轮询：别的入口（设置页 / 托盘 / 快捷键）改了开关时这边立刻跟上
+  unlistens.push(
+    await listen<boolean>('overlay-visible', e => {
+      if (status.value) status.value.overlay.visible = e.payload
+    }),
+    await listen<boolean>('overlay-clickthrough', e => {
+      if (status.value) status.value.overlay.clickthrough = e.payload
+    }),
+    await listen<boolean>('overlay-always-on-top', e => {
+      if (status.value) status.value.overlay.always_on_top = e.payload
+    }),
+    await listen<boolean>('tts-enabled', e => {
+      if (status.value) status.value.tts.enabled = e.payload
+    }),
+  )
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  unlistens.forEach(fn => fn())
 })
 
 // 朗读条件人话摘要：身份规则之间是「或」，敏感词屏蔽独立叠加，全关 = 不限身份
@@ -52,25 +116,43 @@ function filterSummary(f: DanmakuFilter): string {
 
       <div class="card">
         <div class="card-label">弹幕窗</div>
-        <div class="card-value" :class="status?.overlay.visible ? 'on' : 'off'">
-          {{ status ? (status.overlay.visible ? '显示中' : '已隐藏') : '—' }}
-        </div>
-        <div class="card-sub">
-          穿透{{ status?.overlay.clickthrough ? '开' : '关' }} · 置顶{{ status?.overlay.always_on_top ? '开' : '关' }}
+        <div class="quick">
+          <div class="quick-row">
+            <span class="quick-label">显示</span>
+            <ToggleSwitch :model-value="status?.overlay.visible ?? false" @change="toggleOverlay('visible')" />
+          </div>
+          <div class="quick-row">
+            <span class="quick-label">穿透</span>
+            <ToggleSwitch
+              :model-value="status?.overlay.clickthrough ?? false"
+              @change="toggleOverlay('clickthrough')" />
+          </div>
+          <div class="quick-row">
+            <span class="quick-label">置顶</span>
+            <ToggleSwitch
+              :model-value="status?.overlay.always_on_top ?? false"
+              @change="toggleOverlay('alwaysOnTop')" />
+          </div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-label">朗读</div>
-        <div class="card-value" :class="status?.tts.enabled ? 'on' : 'off'">
-          {{ status ? (status.tts.enabled ? '已开启' : '已关闭') : '—' }}
+        <div class="quick">
+          <div class="quick-row">
+            <span class="quick-label">全部朗读</span>
+            <ToggleSwitch :model-value="status?.tts.enabled ?? false" @change="toggleTts()" />
+          </div>
         </div>
         <div class="card-sub">
-          {{ status && status.tts.enabled ? filterSummary(status.tts.filter) : '—' }}
+          {{ status && status.tts.enabled ? filterSummary(status.tts.filter) : '弹幕 / 礼物 / 欢迎都不念' }}
         </div>
       </div>
     </div>
-    <p class="dashboard-tip">只读展示；修改请到「弹幕」或「朗读」页。</p>
+    <p class="dashboard-tip">
+      快捷开关与「弹幕设置」「朗读设置」页是同一份状态。朗读关掉后弹幕 / 礼物 / 欢迎都不出声（设置页的「试听」除外）；
+      穿透与置顶只对本次运行生效，重启回到默认（不穿透、置顶开）。
+    </p>
   </div>
 </template>
 
@@ -121,22 +203,33 @@ h3 {
   letter-spacing: -0.5px;
 }
 
-.card-value.on {
-  color: var(--green);
-}
-
-.card-value.off {
-  color: var(--text-faint);
-}
-
 .card-value.live {
   color: var(--accent);
+}
+
+/* 快捷开关：标签在左、开关在右，行高与设置页的开关行接近但不占满整卡 */
+.quick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quick-label {
+  font-size: 13px;
+  color: var(--text);
 }
 
 .card-sub {
   font-size: 12px;
   color: var(--text-dim);
-  margin-top: 4px;
+  margin-top: 8px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -146,5 +239,6 @@ h3 {
   font-size: 13px;
   color: var(--text-faint);
   padding-top: 8px;
+  line-height: 1.5;
 }
 </style>

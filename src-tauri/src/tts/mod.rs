@@ -31,11 +31,17 @@ use text::{build_backing_text, build_text, build_welcome_text, is_emote, matches
 /// （否则高频房间合成刚起步就被反复作废，白忙一场）
 const INTERRUPT_COOLDOWN: Duration = Duration::from_millis(1800);
 
-/// 队列项：`force` 标记不受「弹幕朗读」总开关限制
-/// （试听与礼物朗读都有自己的开关，不该被弹幕那一侧的总开关静音）
+/// 队列项
+///
+/// 两个布尔位各管一件事，别再混用：
+/// - `force`：**压力下别丢**——不被新弹幕挤掉（见 `push` 的淘汰策略）、不被「积压打断」作废、
+///   熔断清积压时保留。礼物朗读 / 欢迎朗读 / 试听都带它。
+/// - `manual`：**用户当场点的试听**，是唯一能绕过朗读总开关的项；其它朗读在总开关关掉时
+///   一律不出声（见 `set_config` 与 `worker.rs` 的三处判定）。
 struct QueueItem {
     text: String,
     force: bool,
+    manual: bool,
 }
 
 /// 朗读队列与配置（Tauri 管理状态）
@@ -109,15 +115,16 @@ impl TtsState {
         let disabled = !config.enabled;
         *self.config.lock().unwrap() = config;
         if disabled {
-            // 只丢待朗读的弹幕：试听与礼物朗读有自己的开关，不被弹幕侧的热开关连带清掉
-            self.queue.lock().unwrap().retain(|item| item.force);
+            // 总开关关掉 = 所有朗读都停：弹幕 / 礼物 / 欢迎一起清，只留用户当场点的试听。
+            // （以前礼物朗读与欢迎朗读靠 force 豁免总开关，现在统一由总开关管住，见 QueueItem 注释）
+            self.queue.lock().unwrap().retain(|item| item.manual);
             // 递增代次作废在途音频（含正在合成的那条）；在播的那条由 play_mp3 的 stop_now 验开关停下
             self.epoch.fetch_add(1, Ordering::Relaxed);
         }
     }
 
     /// 入队；队列满时丢弃最旧的待朗读项（高速直播间不堆积）
-    fn push(&self, text: String, max_queue: u32, force: bool) {
+    fn push(&self, text: String, max_queue: u32, force: bool, manual: bool) {
         let mut queue = self.queue.lock().unwrap();
         while queue.len() >= max_queue.max(1) as usize {
             // 丢最旧的**弹幕**：队首可能就是插队的礼物，直接 pop_front 会把它顶掉
@@ -132,7 +139,7 @@ impl TtsState {
                 }
             }
         }
-        queue.push_back(QueueItem { text, force });
+        queue.push_back(QueueItem { text, force, manual });
         drop(queue);
         self.notify.notify_one();
     }
@@ -144,7 +151,7 @@ impl TtsState {
         while queue.len() >= max_queue.max(1) as usize {
             queue.pop_front();
         }
-        queue.push_front(QueueItem { text, force: true });
+        queue.push_front(QueueItem { text, force: true, manual: false });
         drop(queue);
         self.notify.notify_one();
     }
@@ -209,7 +216,7 @@ pub fn on_danmaku(app: &AppHandle, d: &Danmaku) {
     if text.is_empty() {
         return;
     }
-    state.push(text, max_queue, false);
+    state.push(text, max_queue, false, false);
     state.interrupt_if_backlogged(interrupt);
 }
 
@@ -217,10 +224,15 @@ pub fn on_danmaku(app: &AppHandle, d: &Danmaku) {
 ///
 /// 进房 / 关注 / 点赞的量级是弹幕的 1.5~10 倍，念出来会把队列一直占着、把弹幕挤没，
 /// 所以只念舰长以上（`GuardEnter` 就是舰长 / 提督 / 总督进场）。
-/// 排到**队尾**（不插队）但 `force = true`：与礼物朗读一样有自己的开关，
-/// 不该被「弹幕朗读」总开关静音。
+/// 排到**队尾**（不插队）但 `force = true`（压力下别丢）；欢迎信息自己的开关是第二道闸，
+/// 第一道是**朗读总开关**（关掉后欢迎朗读也不出声）。
 pub fn on_welcome(app: &AppHandle, w: &Welcome) {
     if w.kind != WelcomeKind::GuardEnter {
+        return;
+    }
+    // 朗读总开关优先：关掉后欢迎朗读也不出声（欢迎信息自己的开关只是第二道闸）
+    let state = app.state::<TtsState>();
+    if !state.is_enabled() {
         return;
     }
     if !app.state::<OverlayState>().welcome.lock().unwrap().tts_guard {
@@ -230,17 +242,19 @@ pub fn on_welcome(app: &AppHandle, w: &Welcome) {
     if text.is_empty() {
         return;
     }
-    let state = app.state::<TtsState>();
-    state.push(text, state.config().max_queue, true);
+    state.push(text, state.config().max_queue, true, false);
 }
 
-/// 试听：不受总开关限制，直接把一段文本送进朗读队列（设置页调音色/语速用）
+/// 试听：直接把一段文本送进朗读队列（设置页调音色/语速用）
+///
+/// 带 `manual = true`：它是**唯一**不受朗读总开关限制的朗读。总开关关掉时用户仍可能在
+/// 设置页点「试听」调音色，这时要能听到声音；其它自动朗读一律由总开关管住。
 pub fn speak_test(app: &AppHandle, text: &str) {
     let text = clean_for_speech(text);
     if text.is_empty() {
         return;
     }
-    app.state::<TtsState>().push(text, 1, true);
+    app.state::<TtsState>().push(text, 1, true, true);
 }
 
 /// 打赏到达钩子（非阻塞，在弹幕事件回调里调用）
@@ -264,6 +278,10 @@ pub fn on_backing(app: &AppHandle, b: &Backing) {
 /// 把一条打赏插队送进朗读队列（开关开启且过了朗读门槛才念）
 fn speak_backing(app: &AppHandle, b: &Backing) {
     let state = app.state::<TtsState>();
+    // 朗读总开关优先：关掉后礼物朗读也不出声（礼物自己的开关只是第二道闸）
+    if !state.is_enabled() {
+        return;
+    }
     let cfg = state.gift_config();
     if !cfg.enabled || b.amount_fen < gift::threshold_fen(&cfg) {
         return;
@@ -318,7 +336,7 @@ mod tests {
     fn queue_drops_oldest_when_full() {
         let state = TtsState::new(TtsConfig::default());
         for i in 0..5 {
-            state.push(format!("第{i}条"), 3, false);
+            state.push(format!("第{i}条"), 3, false, false);
         }
         let queue = state.queue.lock().unwrap();
         assert_eq!(queue.len(), 3);
@@ -328,7 +346,7 @@ mod tests {
     #[test]
     fn interrupt_only_when_playing_with_backlog_and_outside_cooldown() {
         let state = TtsState::new(TtsConfig::default());
-        state.push("新弹幕".into(), 5, false);
+        state.push("新弹幕".into(), 5, false, false);
 
         // 没在出声 → 不打断
         state.interrupt_if_backlogged(true);
@@ -357,8 +375,8 @@ mod tests {
     #[test]
     fn 插队的礼物排在待朗读弹幕之前() {
         let state = TtsState::new(TtsConfig::default());
-        state.push("弹幕一".into(), 5, false);
-        state.push("弹幕二".into(), 5, false);
+        state.push("弹幕一".into(), 5, false, false);
+        state.push("弹幕二".into(), 5, false, false);
         state.push_front("感谢老板A送的5个辣条".into(), 5);
         let queue = state.queue.lock().unwrap();
         assert_eq!(queue.front().unwrap().text, "感谢老板A送的5个辣条");
@@ -369,7 +387,7 @@ mod tests {
     fn 插队的礼物不会被队列上限挤掉() {
         let state = TtsState::new(TtsConfig::default());
         for i in 0..5 {
-            state.push(format!("弹幕{i}"), 2, false);
+            state.push(format!("弹幕{i}"), 2, false, false);
         }
         // 队列已满（上限 2）：插队时丢的是最旧的弹幕，礼物自己一定在队首
         state.push_front("感谢老板A送的5个辣条".into(), 2);
@@ -384,7 +402,7 @@ mod tests {
         let state = TtsState::new(TtsConfig::default());
         state.push_front("感谢木茂上舰舰长".into(), 2);
         for i in 0..5 {
-            state.push(format!("弹幕{i}"), 2, false);
+            state.push(format!("弹幕{i}"), 2, false, false);
         }
         let queue = state.queue.lock().unwrap();
         assert_eq!(queue.len(), 2);
@@ -393,17 +411,19 @@ mod tests {
     }
 
     #[test]
-    fn 关闭总开关时保留试听与礼物朗读() {
+    fn 关闭总开关时只保留手动试听() {
         let state = TtsState::new(TtsConfig::default());
-        state.push("弹幕一".into(), 5, false);
+        state.push("弹幕一".into(), 5, false, false);
         state.push_front("感谢老板A送的5个辣条".into(), 5);
+        state.push("试听文本".into(), 1, true, true);
         state.set_config(TtsConfig {
             enabled: false,
             ..TtsConfig::default()
         });
         let queue = state.queue.lock().unwrap();
-        assert_eq!(queue.len(), 1, "只该丢掉待朗读的弹幕");
-        assert_eq!(queue.front().unwrap().text, "感谢老板A送的5个辣条");
+        assert_eq!(queue.len(), 1, "礼物朗读不再豁免总开关，只该留下手动试听");
+        assert_eq!(queue.front().unwrap().text, "试听文本");
+        assert!(queue.front().unwrap().manual);
     }
 
     #[test]
