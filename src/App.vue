@@ -5,6 +5,7 @@ import LoginDialog from './components/LoginDialog.vue'
 import SaveTip from './components/SaveTip.vue'
 import { refreshLogin } from './composables/useLogin'
 import { useSaveTip } from './composables/useSaveTip'
+import { useTheme, type ThemeMode } from './composables/useTheme'
 import { checkUpdate } from './composables/useUpdate'
 import AboutView from './views/AboutView.vue'
 import DanmakuView from './views/DanmakuView.vue'
@@ -42,6 +43,15 @@ watch(current, () => {
 // 任何页面或子组件（弹幕窗 / 发送框这些标签页）直接调用 showSaved() / showError() 即可。
 // 以前各页各挂一个、两个 fork 自有标签页干脆内联，导致「有的页面是浮层、有的内联、有的没有」。
 const { savedTip, opError } = useSaveTip()
+
+// 界面主题：跟随系统 / 浅色 / 深色。只影响主窗口外观（弹幕窗与发送框用各自固定的 CSS）：
+// 状态与持久化在 composables/useTheme.ts，首帧由 public/theme-boot.js 提前写 data-theme。
+const { mode: themeMode, setTheme } = useTheme()
+const THEMES: { key: ThemeMode; label: string; tip: string }[] = [
+  { key: 'system', label: '跟随', tip: '跟随 Windows 的浅色 / 深色设置' },
+  { key: 'light', label: '浅色', tip: '固定使用浅色配色' },
+  { key: 'dark', label: '深色', tip: '固定使用深色配色' },
+]
 </script>
 
 <template>
@@ -61,6 +71,22 @@ const { savedTip, opError } = useSaveTip()
           {{ n.label }}
         </button>
       </nav>
+      <!-- 主题切换常驻在侧边栏底部：不占表单页空间，任何页面都点得到 -->
+      <div class="theme-bar">
+        <div class="theme-label">主题</div>
+        <div class="theme-options">
+          <button
+            v-for="t in THEMES"
+            :key="t.key"
+            class="theme-btn"
+            :class="{ active: themeMode === t.key }"
+            :title="t.tip"
+            :aria-pressed="themeMode === t.key"
+            @click="setTheme(t.key)">
+            {{ t.label }}
+          </button>
+        </div>
+      </div>
     </aside>
     <main ref="contentEl" class="content">
       <!-- v-show 常驻渲染：切换页面不销毁组件，连接状态/弹幕列表保留 -->
@@ -151,6 +177,46 @@ nav {
 .nav-item.active {
   background: var(--accent-soft);
   color: var(--accent-strong-text);
+}
+
+/* 主题切换（侧边栏底部）：三段式，当前模式高亮。margin-top: auto 把它推到最底 */
+.theme-bar {
+  margin-top: auto;
+  padding: 10px 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.theme-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.theme-options {
+  display: flex;
+  gap: 4px;
+}
+
+.theme-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.theme-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.theme-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong-text);
+  font-weight: 600;
 }
 
 .content {

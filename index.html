@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bili-danmu-streamer</title>
+    <!-- 首帧前按 localStorage 写入 <html data-theme>，避免主题闪一下。
+         CSP 是 script-src 'self'，所以只能走同源外链（public/theme-boot.js）。 -->
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="app"></div>

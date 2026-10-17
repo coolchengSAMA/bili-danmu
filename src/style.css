@@ -29,33 +29,39 @@
   --gray: #9a9ea8;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+/* 深色配色：`<html data-theme="dark">` 时启用（浅色就是上面的 `:root` 默认值）。
+ *
+ * 为什么不用 `@media (prefers-color-scheme: dark)`：那样只能在 Windows 设置里切换主题，
+ * 应用内无法切换。现在「跟随系统」由 JS 解析后写成 data-theme（`composables/useTheme.ts`），
+ * 首帧由 `index.html` 里的 `public/theme-boot.js` 同步写入，所以这里只认属性。
+ *
+ * 只有主窗口引用本文件：overlay / sender 走各自的 CSS（颜色固定），不受主题影响——
+ * 弹幕窗要压在游戏画面上、发送框要吸附在它下面，跟着主题变反而会花。 */
+:root[data-theme='dark'] {
+  color-scheme: dark;
 
-    --bg: #17181c;
-    --bg-side: #1d1e24;
-    --bg-elev: #23242b;
-    --border: #33343c;
-    --text: #e8e8ea;
-    --text-dim: #b0b2ba;
-    /* 深色同理：对卡片 #1d1e24 4.73:1、对页面 #17181c 5.42:1（原值 #6a6d77 只有 3.22:1） */
-    --text-faint: #8b8e98;
+  --bg: #17181c;
+  --bg-side: #1d1e24;
+  --bg-elev: #23242b;
+  --border: #33343c;
+  --text: #e8e8ea;
+  --text-dim: #b0b2ba;
+  /* 深色同理：对卡片 #1d1e24 4.73:1、对页面 #17181c 5.42:1（原值 #6a6d77 只有 3.22:1） */
+  --text-faint: #8b8e98;
 
-    --accent: #2d6cdf;
-    --accent-hover: #3575ea;
-    --accent-soft: #2f3b52;
-    --accent-strong-text: #ffffff;
-    --hover: #26272d;
+  --accent: #2d6cdf;
+  --accent-hover: #3575ea;
+  --accent-soft: #2f3b52;
+  --accent-strong-text: #ffffff;
+  --hover: #26272d;
 
-    --danger: #b3372f;
-    --danger-hover: #c53f36;
+  --danger: #b3372f;
+  --danger-hover: #c53f36;
 
-    --green: #3fb950;
-    --yellow: #d29922;
-    --red: #e5534b;
-    --gray: #666666;
-  }
+  --green: #3fb950;
+  --yellow: #d29922;
+  --red: #e5534b;
+  --gray: #666666;
 }
 
 * {
