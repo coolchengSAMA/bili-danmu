@@ -447,8 +447,10 @@ h2 {
   cursor: pointer;
 }
 
+/* 悬停给底色 + 文字提亮：这行是折叠区唯一入口，光变文字颜色不够显眼 */
 .fold-head:hover {
   color: var(--text);
+  background: var(--hover);
 }
 
 .fold-arrow {

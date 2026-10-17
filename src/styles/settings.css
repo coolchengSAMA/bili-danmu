@@ -35,6 +35,8 @@
 
 .tab-btn:hover {
   color: var(--text);
+  background: var(--hover);
+  border-radius: 6px 6px 0 0;
 }
 
 .tab-btn.active {
@@ -80,13 +82,27 @@
   justify-content: space-between;
   gap: 12px;
   /* 8px 而非 12px：设置页最高的标签要刚好不出竖向滚动条 */
-  padding: 8px 0;
+  /* 左右 padding + 负 margin = 行铺满卡片内宽：hover 底色才能像系统设置页那样顶到卡片边缘，
+     而文字位置不变（14px 必须与 .setting-card 的左右 padding 同步） */
+  padding: 8px 14px;
+  margin: 0 -14px;
+  border-radius: 6px;
   border-bottom: 1px solid var(--border);
   font-size: 16px;
 }
 
 .setting-row:last-of-type {
   border-bottom: none;
+}
+
+/* 可点行（整行空白 / 标签文字点一下 = 切换开关）的悬停反馈
+ *
+ * 与下面那条 `cursor: pointer` 用**同一条判据**（行内有开关且没有别的表单控件）：
+ * 变色和箭头都在说「这一整行可以点」。不可点的行（滑块 / 下拉 / 带数字框的荣耀等级行）
+ * 保持原样——给它们也加底色会诱导用户去点空白。
+ * 底色用 `--hover`（浅色 #e3e6ec / 深色 #26272d），与页面里其它 hover 同一个令牌。 */
+.setting-row:has([role='switch']):not(:has(input, select, textarea)):hover {
+  background: var(--hover);
 }
 
 /* 可点行（整行空白 / 标签文字点一下 = 切换开关）的鼠标提示
