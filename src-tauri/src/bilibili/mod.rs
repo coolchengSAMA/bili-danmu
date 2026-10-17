@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod audience;
+pub mod emote;
 pub mod event;
 pub mod live;
 pub mod login;

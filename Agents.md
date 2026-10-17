@@ -8,7 +8,7 @@
 
 打赏（礼物 / SC / 上舰）的**弹幕窗渲染**与**朗读**都已上线：解析 → 金额门槛 + 连击合并（`src-tauri/src/gift.rs`）→ 弹幕窗内独立礼物区（弹幕列表上方）；朗读侧另算一遍门槛与连击（`src-tauri/src/tts/gift.rs`）→ 插队送进 Edge TTS 队列。
 
-- 解析：`parser.rs` 把 `SEND_GIFT` / `COMBO_SEND` / `SUPER_CHAT_MESSAGE` / `GUARD_BUY` 解成 `BilibiliEvent::Backing`；金额统一折算成整数「分」（`amount_fen`，金瓜子 1000 = 1 元），免费礼物（银瓜子 / 零价）直接返回 None
+- 解析：`parser/gift.rs` 把 `SEND_GIFT` / `COMBO_SEND` / `SUPER_CHAT_MESSAGE` / `GUARD_BUY` 解成 `BilibiliEvent::Backing`；金额统一折算成整数「分」（`amount_fen`，金瓜子 1000 = 1 元），免费礼物（银瓜子 / 零价）直接返回 None
 - `COMBO_SEND` **只当连击仍在继续的信号**（延长合并窗口），数量与金额一律以 `SEND_GIFT` 为准——两路事件同时下发，两边都计就重复；它是否带价格字段未实测（用 `scripts/ws-probe.ps1` 验证）
 - 门槛与连击合并都在 Rust（`gift::on_backing`）：门槛按**累加后的总额**判定，未过门槛的连击先攒在分组里；同人同礼物在 `combo_window_secs` 内合并成一行，行 id = 分组键 + 首次时间戳，前端按 id **覆盖**更新（位置不变）
 - 渲染：`GiftRow.vue` + `MetaBadges.vue`。徽章列抽成 `MetaBadges` 是**故意共用**的——`role-slot` 宽度与 `--role-indent` / 发送框左缩进（`window.rs` `sender_layout_metrics`）同源，复制一份 CSS 后改单侧就会错位；`row-style.ts` 同理（两行共用描边计算）。**礼物行不显示粉丝牌**：粉丝牌由弹幕行组装成 `medal` 对象传入，礼物行不传就不渲染（打赏行已有用户名与礼物名）；打赏事件（`Backing`）因此不再下发 `medal_*` 字段，前端也不再有 `DisplayBacking`，礼物行直接用 `BackingEvent`
@@ -24,7 +24,7 @@
 
 五个 cmd 解成 `BilibiliEvent::Welcome` → `welcome.rs` 去重限速 → 两个独立消费者（渲染 / 朗读）。
 
-- 解析（`parser.rs`，字段号全部实测得出，见 `Task/findings.md`）：
+- 解析（`parser/welcome.rs`，字段号全部实测得出，见 `Task/findings.md`）：
   - `INTERACT_WORD_V2` —— **不是 JSON 是 base64 protobuf**（`1`=uid、`2`=用户名、`5`=msg_type、`7`=时间戳秒），msg_type `1/2/3` → 进房 / 关注 / 分享，其余取值不猜语义直接丢。`INTERACT_WORD`（V1）已不存在
   - `LIKE_INFO_V3_CLICK` —— 单次点赞，纯 JSON，`uinfo.guard.level` 直接可读
   - `LIKE_INFO_V3_UPDATE` —— 只有累计点赞总数（`click_count`），**不是事件**，故意不解析
@@ -72,6 +72,23 @@
   - 「发送测试弹幕」一并预览在线列（`buildPreviewAudience()`，覆盖超长昵称/无舰长牌/三档舰队）：带 `preview: true` 的快照盖住真实数据，`preview-reset` 时回落；**有预览数据时未连接也显示**（否则不上播就验证不了样式）
 - 差异清单、回退方式与「同步上游」的纪律写在 `STREAMER.md`；改这里的行为时要同步更新它。
 
+## 表情包（渲染 + 朗读均已上线）
+
+弹幕里的表情包看 `DANMU_MSG.info[0][13]`：有表情时是对象（`emoticon_unique` / `url` / `width` / `height` / `bulge_display`），无表情时是**字符串 `"{}"`**。解析在 `emote.rs::parse_emote` → `event::Emote`，随弹幕事件下发（渲染与朗读同一个字段）。
+
+- **判断依据不是「有没有中括号」**：`[委屈]` 这类只是全站小表情；`room_*`（UP主大表情 / 房间专属）、`official_*`（通用表情，你举的「冲鸭」`official_332`、「upup」`official_348`）、`upower_[包名_表情名]`（收藏集装扮）在正文里是**纯词、没有中括号** —— 它们全靠 `info[0][13].emoticon_unique` 非空来认（实测 147 条样本 0 例外，且表情弹幕的正文全部等于表情名）
+- 渲染在 `overlay/DanmakuRow.vue`：表情弹幕的正文**补上中括号**显示（「冲鸭」→「[冲鸭]」）—— 不拉外部图（桌面壳里图片很容易瘸：CSP 默认不只是 `'self' data:`，表情图地址又有 `http://` 与协议相对 `//` 两种形态，一失败就是破图/裸文字，不如文字好认）
+- 报文里的 `url` / `width` / `height` / `bulge` 照实解析并下发（`emote.rs::normalize_url` 把地址统一升到 `https://`），但**不用于渲染**：保留是协议建模 + 日志诊断用（日志会打 unique 与尺寸）
+- 朗读（`tts/text.rs::build_text`）：带表情字段的**整条不念**；无字段的老式小表情**剥掉 `[名字]` 只念文字**（「今天真好[花]」→ 念「今天真好」，整条都是表情则不念）；开关在「朗读 → 朗读筛选 → 朗读表情弹幕」（`TtsConfig::read_emote`，开启后两类都照常念）
+- `info[0][13]` 无表情时是字符串 `"{}"` 而不是空对象：`as_object()` 直接 None，**别当对象硬解**；图片地址必须在 Rust 侧升到 `https://`（老式小表情给协议相对 `//i0.hdslb.com/…`，通用表情「冲鸭」给的是 `http://…`）
+- 判据（`emote.rs::parse_emote`）：`info[0][13]` 能当对象解且 `emoticon_unique` 非空 → 表情，**图片地址可有可无**（早期版本要求地址非空，把没地址的表情漏成普通文字、还被朗读）
+- `info[0][13]` 无表情时是字符串 `"{}"` 而不是空对象：`as_object()` 直接 None，**别当对象硬解**；图片地址仍会归一化到 `https://`（老式小表情给协议相对 `//i0.hdslb.com/…`，通用表情「冲鸭」给的是 `http://…`）
+- 待验证：**文字 + 表情混合**弹幕（本次 147 条里没有）。若 B 站允许，`info[0][13]` 也只带一个表情对象，当前实现会整行换图 / 整条不念，会丢掉其中的文字。旁证字段：`info[0][12]`（0/1 标记）、`info[0][15].extra`（冗余副本，含 `dm_type=1`）
+- 排障：逐条弹幕 / 表情日志是 **debug 级**（`lib.rs` 里 level 默认 Info，平时不落盘、不刷屏，避免高频房把 5MB 轮转刷满、冲掉故障日志）—— 需要时把那一行临时改成 `Debug` 再复现一次；日志目录 `%LOCALAPPDATA%\com.bilidanmu.app\logs\bili-danmu.log`（关于页可一键打开）
+- 实测脚本：`Task/probe-emote.ps1`（表情清单）、`Task/probe-emote-map.ps1`（unique→名字 逐条校验）、`Task/analyze-dump.ps1`。**注意抓包抽样不可靠**（180 秒只有几十条 DANMU_MSG，容易漏掉低频形态），房间弹幕历史接口 `xlive/web-room/v1/dM/gethistory` 能直接看到自己发出去的原文，排「发出去的到底是什么」很快
+- **两类表情都要认**：① 报文带字段的（`d.emote`：`room_` / `official_` / `upower_`）；② **无字段的按正文里的 `[名字]` 片段认**（`emote.rs::strip_bracket_emotes`，重剥离不重整体匹配）。三个实测形态：连点表情拼成一条（`[比心][比心][比心]`）、文字 + 表情混在同一条（`今天真好[花]` → 只念「今天真好」）、纯表情（`[花]` → 不念）。畸形中括号（未闭合 / 内部还有 `[` / 名字为空或 > 30 字）一律不剥
+- 代价（已知且接受）：手打方括号文字（「价格[10]元」）也会被当表情剥掉
+
 ## 技术栈
 
 - 前端：Vue 3（`<script setup>`）+ Vite + TypeScript，包管理 pnpm
@@ -96,14 +113,14 @@
 - 目录结构：
   - `src/` 前端：
     - `views/` 页面（RoomView 房间、DanmakuView 弹幕、TtsView 朗读、AboutView 关于，后三者均为页内标签式）
-    - `components/` 复用组件（`LoginDialog.vue` 登录二维码弹窗、`DanmakuFilterPanel.vue` 弹幕筛选表单（显示/朗读共用）、`StatusDashboard.vue` 运行状态仪表盘、`SettingRow.vue` 设置行、`OverlayWindowPanel.vue` 弹幕窗标签页、`SenderWindowPanel.vue` 发送框标签页（显示开关 + 全局快捷键录制））
+    - `components/` 复用组件（`LoginDialog.vue` 登录二维码弹窗、`DanmakuFilterPanel.vue` 弹幕筛选表单（显示/朗读共用）、`StatusDashboard.vue` 运行状态仪表盘、`SettingRow.vue` 设置行、`OverlayWindowPanel.vue` 弹幕窗标签页、`SenderWindowPanel.vue` 发送框标签页（显示开关 + 全局快捷键录制）、`SaveTip.vue` 保存/错误浮层提示（右下角，不占文档流）、`FollowingLiveRooms.vue` 关注在播一行（**上游抽出的组件，本分支未使用**：streamer 的关注在播仍是 RoomView 里的折叠实现，见 `STREAMER.md`；同步上游时不要删这个文件））
     - `composables/` 逻辑（`useLogin` 登录态、`useRoomConnection` 连接与最近房间、`useTtsConfig` 朗读配置与音色列表与校验、`useSaveTip` 设置页提示、`useUpdate` 更新检查结果）
     - `overlay/OverlayApp.vue` + `overlay/DanmakuRow.vue` 悬浮层入口与单行渲染、`overlay/GiftRow.vue` 礼物行、`overlay/MetaBadges.vue` 两区共用的身份徽章列、`overlay/row-style.ts` 共用的描边计算、`sender/SenderApp.vue` 发送弹幕框入口
     - `styles/settings.css` 全局设置页样式（约束见「注意事项」）、`types/ipc.ts` IPC 类型定义、`overlay.ts` / `sender.ts` 独立入口（对应 `overlay.html` / `sender.html`）、`context-menu.ts` 两个悬浮窗入口共用的右键菜单屏蔽
   - `src-tauri/src/` Rust 核心：
     - `lib.rs` 组装（状态托管、窗口创建、托盘、命令注册）、`state.rs` 内存状态、`commands.rs` IPC 命令、`connection.rs` 连接与断线重连、`window.rs` 窗口辅助与发送框吸附、`shortcut.rs` 发送框全局快捷键（串解析 / 注册 / 注销）
-    - `bilibili/`：`protocol.rs` 协议包、`parser.rs` 解压/解析、`api.rs` HTTP 接口（房间解析、弹幕配置、主播名）、`ws.rs` WebSocket 会话、`wbi.rs` 签名、`login.rs` 扫码登录、`send.rs` 发送弹幕、`live.rs` 关注在播与我的直播间（关注列表 + 批量开播状态 + 按 uid 查自己的房间）、`event.rs` 事件
-    - `tts/`：`mod.rs` 队列状态与入口钩子（`on_danmaku` / `on_backing`）、`text.rs` 筛选/清洗/组装文案（弹幕与打赏各一个组装函数）、`gift.rs` 礼物朗读的连击聚合与静默窗口、`worker.rs` 合成与播放流水线、`player.rs` winmm MCI 播放、`edge.rs` Edge TTS 协议、`edge/drm.rs` 的 `Sec-MS-GEC` 令牌生成（v2 自定义哈希）、`edge/voices.rs` 音色表、`edge/ssml.rs` SSML 构造、`edge/util.rs` 时间与编码工具
+    - `bilibili/`：`protocol.rs` 协议包、`parser.rs` 解压/展开 + 命令分发 + 共用小工具（命令解析按域拆在 `parser/`：`danmaku.rs` 弹幕 / `gift.rs` 打赏 / `welcome.rs` 欢迎）、`emote.rs` 表情包（报文表情字段解析 + 正文 `[名字]` 剥离）、`api.rs` HTTP 接口（房间解析、弹幕配置、主播名）、`ws.rs` WebSocket 会话、`wbi.rs` 签名、`login.rs` 扫码登录、`send.rs` 发送弹幕、`live.rs` 关注在播与我的直播间（关注列表 + 批量开播状态 + 按 uid 查自己的房间）、`audience.rs` 在线人数与实时在线榜（**streamer 分支**）、`event.rs` 事件
+    - `tts/`：`mod.rs` 队列状态与入口钩子（`on_danmaku` / `on_backing`）、`clean.rs` 朗读前清洗（噪声字符 / 重复折叠 / 链接）、`text.rs` 筛选与组装文案（弹幕与打赏各一个组装函数）、`gift.rs` 礼物朗读的连击聚合与静默窗口、`worker.rs` 合成与播放流水线、`player.rs` winmm MCI 播放、`edge.rs` Edge TTS 协议、`edge/drm.rs` 的 `Sec-MS-GEC` 令牌生成（v2 自定义哈希）、`edge/voices.rs` 音色表、`edge/ssml.rs` SSML 构造、`edge/util.rs` 时间与编码工具
     - `config.rs` 配置读写与全局互斥、`config/types.rs` 结构体与默认值、`config/crypto.rs` DPAPI 加解密
     - `gift.rs` 礼物列表：金额门槛与连击合并（唯一判定处，前端只负责按 id 覆盖与条数上限）
     - `update.rs` 版本更新提醒：请求 GitHub Releases 比对版本（只提醒，不下载安装；**streamer 分支查本仓库的 Release**，版本比较支持 `-streamer.N` 后缀）、ShellExecuteW 打开下载页
@@ -116,7 +133,7 @@
 
 - 禁止在 `main` 上直接开发：功能 / 修复 / 重构一律先切分支（沿用 `feature/` / `fix/` / `refactor/` 前缀，见 `git branch -a`），完成后开 PR、squash 合并回 `main`；只有版本号提升、README / 文档这类发布收尾可直接提交 `main`
 - 版本号要同步改 3 处：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`；`src-tauri/Cargo.lock` 由 `cargo check` / 构建自动更新
-- **本仓库（streamer 分支）的版本线**：版本号形如 `1.4.1-streamer.N`（前三位 = 所基于的上游版本，`N` = 本版发布序号），Release tag 同形（`v1.4.1-streamer.1`）。更新检查（`update.rs`）**查本仓库的 Release**，其版本比较已支持这段后缀（第四段取预发布段里最后一个数字）——否则同一个 `1.4.1` 下 `-streamer.2` 会被判成与 `-streamer.1` 相等，更新提示永远不会出现。
+- **本仓库（streamer 分支）的版本线**：版本号形如 `1.5.0-streamer.N`（前三位 = 所基于的上游版本，`N` = 本版发布序号），Release tag 同形（`v1.5.0-streamer.1`）。更新检查（`update.rs`）**查本仓库的 Release**，其版本比较已支持这段后缀（第四段取预发布段里最后一个数字）——否则同一个 `1.5.0` 下 `-streamer.2` 会被判成与 `-streamer.1` 相等，更新提示永远不会出现。
 - **名称**：产品名 `bili-danmu-streamer`（`tauri.conf.json` 的 `productName`：决定安装目录、开始菜单项与安装包文件名），界面显示名「bili-danmu-streamer」（主窗口标题、弹幕窗/发送框标题、托盘提示）。**`identifier` 必须保持 `com.bilidanmu.app`**：配置目录与登录态都挂在它下面，改掉等于换一个应用（要重新扫码登录）。
 - 流程：改版本 → commit（`🚀 应用版本号升至 X.Y.Z（…）`）→ 推 `main` → `pnpm tauri build` → `gh release create`
 - 安装包路径：`src-tauri/target/release/bundle/nsis/bili-danmu_<版本>_x64-setup.exe`
@@ -133,7 +150,7 @@
 - `config.rs` 读写持有全局互斥（save_* 均为 load-modify-save）：新增保存函数须沿用 `lock_cfg()` + `*_unlocked` 模式，勿在持锁时调用加锁公共入口（std Mutex 不可重入）
 - 断线自动重连在 `connection.rs` `spawn_connection`（1/2/4/…/30s 退避、10 次上限）；改连接收尾逻辑时保留取消令牌身份检查（`finish_connection`），否则旧任务会误清新连接状态
 - 「发送测试弹幕」（`src/danmaku-preview.ts` + 弹幕页「弹幕样式」标签）走的是**真实事件通道**：本地 emit 与 Rust 同名的 `danmaku` / `gift` / `welcome` 事件（`core:default` 已含 `core:event:default` 的 `allow-emit`，所以不需要 Rust 命令、也不需要新权限），预览与真实弹幕共用同一套组件与 CSS——**不要另写一套预览渲染**，那必然与真实渲染漂移（徽章列宽 `role-slot`、换行续行对齐、描边），预览就会骗人。预览行带 `preview: true`：① 绕过弹幕显示过滤（否则房间设了「只显示舰长」时普通样例会被整条丢弃，用户以为按钮坏了）；② 每次推送前先 emit `preview-reset`，overlay 只删带 `isPreview` / `preview` 标记的行，**真弹幕 / 真礼物 / 真欢迎行一条不动**（预览 id 也带 `preview-` 前缀，不会撞）；设置页的「清除测试弹幕」按钮就是再发一次同一个 `preview-reset`。入口在弹幕页「弹幕样式」标签底部（与「显示舰长/房管标记 / 粉丝牌 / 荣耀等级」这几个开关同页，改样式时顺手就能验证）。预览**不**绕过「礼物区 / 欢迎信息」开关：关掉的部分不推并在界面说明。未连接直播间时 `currentRoomId` 为 0，正常判定会把所有粉丝牌判成「其它房」，故预览行自带 `is_room_medal` 标记来展示「本房牌」绿色配色。注意行是真画在弹幕窗上的：推流时会被 OBS 采集（按钮文案已写明）。
-- 发送弹幕需登录态（`bili_jct` 做 CSRF 签名，游客无 bili_jct 会报错）；发送框窗口始终吸附 Overlay 下方（`window.rs` `sync_sender_docked`），**左端与面板背景左边缘同一条线**（6px padding + `--panel-inset` 5.15em，不再对齐正文列）、**宽度取面板宽度的 50%（上限 260px）**、高度随弹幕字号缩放；右端带「穿透」开关按钮（发送框是独立窗口，穿透开启后仍可点；但发送框可整条隐藏，此时关掉穿透的入口在主界面「弹幕窗」标签与托盘菜单）——改 Overlay 布局（容器 padding、`--role-indent` / `--panel-inset` / `--audience-indent`）时须同步 `sender_layout_metrics` 里的这几个系数。**左侧那条 `--panel-inset` 宽的留白是头衔列**（房管 / 舰长 / 粉丝牌画在面板底色左侧，底色左边缘就是这条带的右界，不是布局错位）：鼠标进入弹幕窗时由 `.title-band` 浮出淡底 + 虚线提示（平时全透明，避免 OBS 录到常驻线条），虚线同时是**缩放手柄** `.resize-handle-west`——系统的缩放热区只在窗口最外缘（实测只有 3px），离可见边缘差一个 `--panel-inset`，用户按直觉抓不到，故用 `getCurrentWindow().startResizeDragging('West')` 把它搬到可见边缘（capabilities 需要 `core:window:allow-start-resize-dragging`）。提示带与手柄的 `top: calc(6px + 1.4em)` 与 `.drag-strip` 高度绑定，改 `.drag-strip` 高度时三处一起改。弹幕窗与发送框的右键菜单在**入口脚本**里挂 `document` 级 `contextmenu` 拦截屏蔽（`src/context-menu.ts` 的 `disableDefaultContextMenu()`，两个入口各调一次），**不要退回 `@contextmenu.prevent`**：按住右键拖动、指针离开窗口后再松开时 `contextmenu` 事件的 target 会落到 `<html>`，挂在组件根节点上的修饰符收不到，WebView2 就会弹出宿主默认菜单（issue #37）
+- 发送弹幕需登录态（`bili_jct` 做 CSRF 签名，游客无 bili_jct 会报错）；发送框窗口始终吸附 Overlay 下方（`window.rs` `sync_sender_docked`），**左端与面板背景左边缘同一条线**（6px padding + `--panel-inset` 5.15em，不再对齐正文列）、**宽度取面板宽度的 50%（上限 260px）**、高度随弹幕字号缩放（`window.rs` 里 `font_size * 3.1 + 6`，要同时容下输入行与出错时才出现的提示行）；**输入区字号 0.9em**（比弹幕小一档）＋紧内边距：210px 的框约 8 个中文字，调回 1em 就只剩 6 个、连 placeholder 都会截尾——宽度是「不能挡太多游戏画面」的硬约束，要更宽得改 `SENDER_WIDTH_RATIO` / `SENDER_MAX_WIDTH`。右端带「穿透」开关按钮（发送框是独立窗口，穿透开启后仍可点；但发送框可整条隐藏，此时关掉穿透的入口在主界面「弹幕窗」标签与托盘菜单）——改 Overlay 布局（容器 padding、`--role-indent` / `--panel-inset` / `--audience-indent`）时须同步 `sender_layout_metrics` 里的这几个系数。**左侧那条 `--panel-inset` 宽的留白是头衔列**（房管 / 舰长 / 粉丝牌画在面板底色左侧，底色左边缘就是这条带的右界，不是布局错位）：鼠标进入弹幕窗时由 `.title-band` 浮出淡底 + 虚线提示（平时全透明，避免 OBS 录到常驻线条），虚线同时是**缩放手柄** `.resize-handle-west`——系统的缩放热区只在窗口最外缘（实测只有 3px），离可见边缘差一个 `--panel-inset`，用户按直觉抓不到，故用 `getCurrentWindow().startResizeDragging('West')` 把它搬到可见边缘（capabilities 需要 `core:window:allow-start-resize-dragging`）。提示带与手柄的 `top: calc(6px + 1.4em)` 与 `.drag-strip` 高度绑定，改 `.drag-strip` 高度时三处一起改。弹幕窗与发送框的右键菜单在**入口脚本**里挂 `document` 级 `contextmenu` 拦截屏蔽（`src/context-menu.ts` 的 `disableDefaultContextMenu()`，两个入口各调一次），**不要退回 `@contextmenu.prevent`**：按住右键拖动、指针离开窗口后再松开时 `contextmenu` 事件的 target 会落到 `<html>`，挂在组件根节点上的修饰符收不到，WebView2 就会弹出宿主默认菜单（issue #37）
 - 发送框可**整条隐藏**（`SenderState.visible`，广播 `sender-visible`；设置页走 `sender_get_config` / `sender_set_config`，托盘与快捷键走 `commands::toggle_sender`），配合**全局快捷键**用来避开游戏里的误点、需要时再唤出回复弹幕：快捷键走 `shortcut.rs`（`tauri-plugin-global-shortcut`，串形如 `Alt+KeyQ` = 修饰键 + UI Events 键码，前端录制要求 ≥1 个修饰键或 F1-F24），**默认不注册**——注册成功后该组合键被系统级占用，其它程序（包括游戏）都收不到，默认值等于替用户抢一个键。换键位走 `apply_hotkey(old, new)`：**先注册新的、成功后再注销旧的**，失败就保留原来能用的那个；别用 `unregister_all`，那会把将来可能新增的其它快捷键（roadmap 里的 TTS / 穿透）一起清掉。事件处理挂在 `Builder::with_handler` 且只认 `ShortcutState::Pressed`。`sender_set_config` 先试注册、失败即整体不生效；启动时注册失败也会写进 `hotkey_error`（设置页读 `sender_hotkey_error` 提示），避免「配置里写着某键位、实际没注册上」的假象。插件必须钉 `~2.3`：2.4 起要求 `tauri ^2.12`，会把 lock 里的 tauri 顶到 2.12，而 npm 侧 `@tauri-apps/api` 还是 2.11，Tauri CLI 会以「大小版本不一致」直接拒绝 `tauri build`。隐藏发送框会连「穿透」按钮一起隐藏，兜底入口是主界面「弹幕窗」标签 + 托盘菜单「显示/隐藏发送框」；唤出时 `window.rs::set_sender_visible` 会 `show + set_focus` 并广播 `sender-shown`，发送框前端据此把光标放进输入框。可见性**不在按键路径上落盘**：快捷键/托盘的 `commands::toggle_sender` 只改 `SenderState.visible` + 广播，写盘交给 lib.rs 里与 `flush_overlay_bounds` 同一个 2s 周期任务（`window::flush_sender_visible`，内存态与 `saved_visible` 不同才写）——写盘是整份 config 的 load-modify-save + DPAPI 加解密，而热键回调跑在**主线程**（插件的隐藏窗口建在主线程，`GlobalHotKeyManager::new()` 不另起线程也不轮询），每按一下写一次会让主线程跟着磁盘走；设置页走 `sender_set_config` 仍然同步落盘（那是显式保存动作，同时更新 `saved_visible`）。取舍与窗口位置同款：切完 2s 内直接退出应用，最后一次切换可能没落盘。
 - 朗读与显示是**两套独立的 `DanmakuFilter`**（`danmaku_filter` / `tts.filter`）：显示筛选在前端 Overlay 做，朗读筛选在 Rust `tts::on_danmaku` 做，改任一侧别把两者耦合成一份配置
 - `src/styles/settings.css` 是**全局样式**（无 scoped），类名是主窗口所有页面的共用契约：往里加规则前先确认不和已有页面的类名撞车（`StatusDashboard` 的 `.tip` 就因此改名 `.dashboard-tip`）；页面独有的差异项（如 `.select` 的 min-width）留在各自组件的 scoped 样式里覆盖
