@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
 import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
@@ -48,6 +48,26 @@ async function apply() {
     showError(e)
   }
 }
+
+// 滑块 / 取色拖动中的实时预览：80ms 节流，只广播不落盘
+//
+// 走 `overlay_preview_style` 而不是 `overlay_set_style`：后者每次都要整份 config 的
+// load-modify-save + DPAPI 加解密，拖动中每帧调一次会把主进程拖在磁盘上。
+// 松手时的 `change` 仍然走 `apply()`（落盘 + 重排发送框）。
+let previewTimer: number | undefined
+function previewStyle() {
+  if (previewTimer !== undefined) return
+  previewTimer = window.setTimeout(() => {
+    previewTimer = undefined
+    void invoke('overlay_preview_style', { style: { ...style.value } }).catch(() => {
+      // 预览失败静默：松手时的 apply() 会再试一次并给出错误提示
+    })
+  }, 80)
+}
+
+onUnmounted(() => {
+  if (previewTimer !== undefined) window.clearTimeout(previewTimer)
+})
 
 async function applyFilter(next: DanmakuFilter) {
   filter.value = next
@@ -146,21 +166,42 @@ onMounted(async () => {
       <div class="setting-card">
         <SettingRow label="字号">
           <div class="size-control">
-            <input v-model.number="style.font_size" type="range" min="13" max="36" step="1" @change="apply()" />
+            <input
+              v-model.number="style.font_size"
+              type="range"
+              min="13"
+              max="36"
+              step="1"
+              @input="previewStyle"
+              @change="apply()" />
             <span class="value">{{ style.font_size }}px</span>
           </div>
         </SettingRow>
 
         <SettingRow label="行间距">
           <div class="size-control">
-            <input v-model.number="style.row_gap" type="range" min="0" max="30" step="1" @change="apply()" />
+            <input
+              v-model.number="style.row_gap"
+              type="range"
+              min="0"
+              max="30"
+              step="1"
+              @input="previewStyle"
+              @change="apply()" />
             <span class="value">{{ style.row_gap }}px</span>
           </div>
         </SettingRow>
 
         <SettingRow label="背景不透明度">
           <div class="size-control">
-            <input v-model.number="style.bg_opacity" type="range" min="0" max="100" step="5" @change="apply()" />
+            <input
+              v-model.number="style.bg_opacity"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              @input="previewStyle"
+              @change="apply()" />
             <span class="value">{{ style.bg_opacity }}%</span>
           </div>
         </SettingRow>
@@ -187,7 +228,7 @@ onMounted(async () => {
 
         <p class="tip">
           弹幕文字统一白色（黑色描边），任意背景下清晰。 背景不透明度作用于弹幕区与礼物区整块面板：0% = 完全透明，100% =
-          纯黑。
+          纯黑。拖动滑块 / 取色时弹幕窗实时预览，松手才保存。
         </p>
 
         <SettingRow label="测试弹幕">
@@ -214,11 +255,21 @@ onMounted(async () => {
     <section v-show="tab === 'color'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="用户名颜色">
-          <input v-model="style.username_color" type="color" class="color-picker" @change="apply()" />
+          <input
+            v-model="style.username_color"
+            type="color"
+            class="color-picker"
+            @input="previewStyle"
+            @change="apply()" />
         </SettingRow>
 
         <SettingRow label="弹幕内容颜色">
-          <input v-model="style.content_color" type="color" class="color-picker" @change="apply()" />
+          <input
+            v-model="style.content_color"
+            type="color"
+            class="color-picker"
+            @input="previewStyle"
+            @change="apply()" />
         </SettingRow>
 
         <SettingRow label="文字加粗">
@@ -230,12 +281,24 @@ onMounted(async () => {
         </SettingRow>
 
         <SettingRow label="描边颜色">
-          <input v-model="style.outline_color" type="color" class="color-picker" @change="apply()" />
+          <input
+            v-model="style.outline_color"
+            type="color"
+            class="color-picker"
+            @input="previewStyle"
+            @change="apply()" />
         </SettingRow>
 
         <SettingRow label="描边宽度">
           <div class="size-control">
-            <input v-model.number="style.outline_width" type="range" min="0" max="5" step="1" @change="apply()" />
+            <input
+              v-model.number="style.outline_width"
+              type="range"
+              min="0"
+              max="5"
+              step="1"
+              @input="previewStyle"
+              @change="apply()" />
             <span class="value">{{ style.outline_width }}px</span>
           </div>
         </SettingRow>

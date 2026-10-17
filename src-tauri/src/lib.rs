@@ -136,7 +136,10 @@ pub fn run() {
             .transparent(true)
             .always_on_top(true)
             .resizable(true)
-            .min_inner_size(120.0, 40.0)
+            // 下限与设置页「弹幕窗」宽高滑块的下限对齐（240 / 120）：
+            // 再小的话左右两条列（头衔列 5.15em + 在线列 6.15em）就把面板挤成负宽，
+            // 拖到 120×40 只会得到一个不可用的弹幕窗（原值是 120×40）
+            .min_inner_size(240.0, 120.0)
             .skip_taskbar(true)
             .shadow(false);
             if let Some(b) = cfg.overlay_bounds {
@@ -353,6 +356,7 @@ pub fn run() {
             commands::overlay_get_size,
             commands::overlay_set_size,
             commands::overlay_reset_position,
+            commands::overlay_preview_style,
             update::check_update,
             update::open_url,
             commands::open_log_dir,

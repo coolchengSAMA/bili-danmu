@@ -427,6 +427,11 @@ onUnmounted(() => {
           :show-online="style.show_online"
           :show-rank="style.show_rank" />
       </div>
+      <!-- 已连接但第一次数据还没到（正常 ~1s，接口被风控时可能更久）：给个占位，
+           否则右列是一条什么都没有的深色竖带，看起来像渲染坏了 -->
+      <div v-else class="audience-slot">
+        <span class="audience-loading">加载中…</span>
+      </div>
       <!-- 右侧现在是内容列，没有可见的面板边缘可抓，所以手柄放在窗口右缘（系统热区只有 3px） -->
       <div class="resize-handle-east" @mousedown="startResizeEast" />
     </template>
@@ -658,6 +663,13 @@ onUnmounted(() => {
   overflow: hidden;
   /* 内容压在底色之上（DOM 顺序已保证，这里只为语义明确） */
   z-index: 1;
+}
+
+/* 在线列空态：只用一档比正文暗的文字，不加描边（它不是弹幕，不该抢注意力） */
+.audience-loading {
+  font-size: 0.82em;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 /* 右侧缩放热区：放在窗口右缘（那里才是系统认可的缩放位置），只把 3px 放宽到 9px。

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 import LoginDialog from './components/LoginDialog.vue'
 import { refreshLogin } from './composables/useLogin'
@@ -28,6 +28,13 @@ const navs: { key: NavKey; label: string }[] = [
 ]
 
 const current = ref<NavKey>('room')
+
+// 切页回到顶部：5 个页面共用同一个滚动容器（v-show 常驻、不销毁），
+// 不重置的话从「弹幕设置」滚到一半切到「主播分区」，会停在新页面中间（新页面更短时直接停在底部）。
+const contentEl = ref<HTMLElement | null>(null)
+watch(current, () => {
+  if (contentEl.value) contentEl.value.scrollTop = 0
+})
 </script>
 
 <template>
@@ -48,7 +55,7 @@ const current = ref<NavKey>('room')
         </button>
       </nav>
     </aside>
-    <main class="content">
+    <main ref="contentEl" class="content">
       <!-- v-show 常驻渲染：切换页面不销毁组件，连接状态/弹幕列表保留 -->
       <RoomView v-show="current === 'room'" />
       <DanmakuView v-show="current === 'danmaku'" />

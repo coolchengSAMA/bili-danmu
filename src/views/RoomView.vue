@@ -438,7 +438,10 @@ h2 {
 .fold-head {
   background: none;
   border: none;
-  padding: 2px 0;
+  /* 命中区比文字大一圈：原来只有 2px 竖向 padding + 14px 小字，
+     鼠标容易点不中（折叠区是这两块唯一入口） */
+  padding: 6px 2px;
+  border-radius: 4px;
   color: var(--text-faint);
   font-size: 14px;
   cursor: pointer;

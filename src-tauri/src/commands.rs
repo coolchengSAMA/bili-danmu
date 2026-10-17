@@ -202,6 +202,24 @@ pub(crate) fn overlay_set_style(
     Ok(())
 }
 
+/// 预览弹幕样式：只更新内存态并广播，**不落盘**
+///
+/// 设置页的滑块在拖动中会以 ~12 次/秒调用（`DanmakuView` 里 80ms 节流），
+/// 而 `overlay_set_style` 每次都要整份 config 的 load-modify-save + DPAPI 加解密，
+/// 拖动时每帧写盘会把主进程拖在磁盘上。所以：**拖动中走这条、松手时走 `overlay_set_style`**。
+///
+/// 故意不在这里重排发送框：`sync_sender_docked` 内部是 set_position + set_size 两次窗口操作，
+/// 拖动中每帧做一次会和滑块抢帧；松手时的 `overlay_set_style` 会补上（发送框尺寸晚一步可见）。
+#[tauri::command]
+pub(crate) fn overlay_preview_style(
+    app: AppHandle,
+    state: State<'_, OverlayState>,
+    style: config::OverlayStyle,
+) {
+    *state.style.lock().unwrap() = style.clone();
+    let _ = app.emit("overlay-style", &style);
+}
+
 /// 读取「在线人数 + 实时在线榜」的最近一次快照
 ///
 /// 弹幕窗挂载时读一次（此前已经拉过就立刻有数），之后靠 `audience-update` 事件更新。

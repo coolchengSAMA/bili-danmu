@@ -86,3 +86,10 @@ input,
 select {
   font-family: inherit;
 }
+
+/* 键盘焦点环：按钮 / 链接这类没有自绘焦点态的控件统一给一圈强调色。
+   输入框自己用 border-color 表示焦点（且各自写了 outline: none），不受影响。 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

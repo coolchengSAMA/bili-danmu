@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 
 import { DEFAULT_DANMAKU_FILTER, type DanmakuFilter } from '../types/ipc'
 
@@ -40,6 +40,33 @@ function parseWords(text: string): string[] {
     ),
   ]
 }
+
+/**
+ * 敏感词输入自动保存
+ *
+ * 这个表单里开关是即时生效的，只有敏感词 textarea 原来必须点按钮——用户改完直接切页
+ * 就会以为已经保存（`v-show` 让它暂时不丢，重启就没）。改成改完 0.6 秒自动落一次，
+ * 「保存敏感词」按钮保留为「立刻生效」。
+ */
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    saveTimer = undefined
+    emitChange()
+  }, 600)
+}
+
+// 只在「用户真的改了词表」时才排自动保存：sync() 回写、保存后父组件回传都会改
+// sensitiveText，不加这层判断会来回触发；解析后的词表与 draft 相同就跳过。
+watch(sensitiveText, next => {
+  if (parseWords(next).join('\n') === draft.value.sensitive_words.join('\n')) return
+  scheduleSave()
+})
+
+onUnmounted(() => {
+  if (saveTimer) clearTimeout(saveTimer)
+})
 
 /**
  * 点行内空白 / 标签文字 = 点这一行的开关（与 `SettingRow` 同一套做法）
@@ -99,7 +126,10 @@ function emitChange() {
       <span class="label">屏蔽含敏感词的弹幕</span>
       <input v-model="draft.enable_sensitive" type="checkbox" class="switch" @change="emitChange()" />
     </div>
-    <p class="tip">每行一个关键词（也可用逗号隔开）。命中任一词就整条不{{ verb }}，舰长 / 房管也不豁免。</p>
+    <p class="tip">
+      每行一个关键词（也可用逗号隔开）。命中任一词就整条不{{ verb }}，舰长 / 房管也不豁免； 改完 0.6
+      秒自动保存，想立刻生效点下面按钮。
+    </p>
     <textarea
       v-model="sensitiveText"
       class="words-input"
