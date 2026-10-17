@@ -59,10 +59,12 @@ function money(fen: number): string {
   color: #fff;
 }
 
+/* 正文区：与弹幕行同一套断行规则（`overflow-wrap: anywhere`，别用 word-break: break-all
+   把礼物名 / 用户名里的英文单词从中间切断），见 DanmakuRow.vue 的注释 */
 .msg {
   flex: 1 1 auto;
   min-width: 0;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .user {

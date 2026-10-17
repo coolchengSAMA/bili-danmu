@@ -143,6 +143,8 @@ async function handleLogout() {
       </template>
     </div>
 
+    <h2>直播间</h2>
+
     <!-- streamer 分支：我的直播间（置顶优先展示，一键连自己房间） -->
     <div v-if="loggedIn" class="my-room-card" :class="{ live: myRoom?.live_status === 1 }">
       <div class="my-room-info">
@@ -173,8 +175,6 @@ async function handleLogout() {
         </button>
       </div>
     </div>
-
-    <h2>直播间</h2>
 
     <div class="row">
       <input

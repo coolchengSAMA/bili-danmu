@@ -103,7 +103,8 @@ const shadow = computed(() => rowShadow(props.overlayStyle))
 }
 
 .rank-name {
-  word-break: break-word;
+  /* 与弹幕行同一套断行（overflow-wrap: anywhere），超长英文昵称也不会被 word-break 切碎 */
+  overflow-wrap: anywhere;
 }
 
 .rank-empty {

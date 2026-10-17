@@ -127,10 +127,15 @@
   border-color: var(--accent);
 }
 
-/* 说明文字与主操作按钮 */
+/* 说明文字与主操作按钮
+ *
+ * 说明文字用 --text-dim（比 --text-faint 亮一档）：这些段落是整段要读的内容
+ * （弹幕样式 / 发送框页各三四段），不是角标；14px 落在 WCAG 正文区间，
+ * 用 --text-faint 时即使达标（4.86:1）也多行阅读仍吃力。
+ */
 .tip {
   font-size: 14px;
-  color: var(--text-faint);
+  color: var(--text-dim);
   padding: 3px 0 8px;
   line-height: 1.5;
 }

@@ -94,11 +94,16 @@ const displayContent = computed(() => {
   color: #fff;
 }
 
-/* 正文区：占剩余宽度，长文本在此折行 */
+/* 正文区：占剩余宽度，长文本在此折行
+ *
+ * 断行用 `overflow-wrap: anywhere`，**不要**退回 `word-break: break-all`：
+ * 后者会把英文/数字单词从中间切断（实测弹幕「请神doinb了说是」被切成
+ * 「请神doi / nb了说是」）；anywhere 优先在空格/边界断，只有整串放不下时才断。
+ * 中文本身允许任意字间断行，不依赖 break-all。 */
 .msg {
   flex: 1 1 auto;
   min-width: 0;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .user {
