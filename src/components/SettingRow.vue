@@ -1,24 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 
 // 设置页的一行：左侧标签 + 右侧控件（默认插槽）。
 //
-// 自身不写样式：.setting-row 与 .label 的规则在被引用页面的 scoped 样式里
-// （子组件根节点会带上父作用域标记，故仍然生效）。
+// 自身不写样式：.setting-row 与 .label 的规则在全局 `styles/settings.css` 里。
+// 整行可点的**鼠标样式**也在那里（`.setting-row:has([role='switch'])…`）——
+// 因为 `DanmakuFilterPanel` 是手写同名结构的行，样式必须两边通用。
 defineProps<{ label: string }>()
 
 const row = ref<HTMLElement | null>(null)
-// 行内是开关时整行可点（见 onRowClick）
-const toggleable = ref(false)
-onMounted(() => {
-  toggleable.value = !!switchOf(row.value)
-})
 
 /**
  * 本行的开关；不满足「整行唯一控件」时返回 null
  *
  * 只有整行唯一控件就是这个开关时才让整行可点：行里还有别的控件时
  * （弹幕过滤页的荣耀等级行，标签里嵌着数字输入框），点歪到输入框旁边会误切开关。
+ * 与 `settings.css` 里那条 `:has()` 光标规则是同一判据——改判据要两处一起改。
  */
 function switchOf(el: HTMLElement | null): HTMLElement | null {
   if (!el) return null
@@ -45,16 +42,8 @@ function onRowClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div ref="row" class="setting-row" :class="{ 'row-toggleable': toggleable }" @click="onRowClick">
+  <div ref="row" class="setting-row" @click="onRowClick">
     <span class="label">{{ label }}</span>
     <slot />
   </div>
 </template>
-
-<style scoped>
-/* 可点行给出鼠标提示：整行空白与标签文字都能切换开关 */
-.row-toggleable,
-.row-toggleable [role='switch'] {
-  cursor: pointer;
-}
-</style>

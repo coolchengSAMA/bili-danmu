@@ -89,9 +89,21 @@
   border-bottom: none;
 }
 
+/* 可点行（整行空白 / 标签文字点一下 = 切换开关）的鼠标提示
+ *
+ * 用 `:has()` 结构化表达与 JS 同一个判据，**不要**再靠组件里加 class：
+ * 原来 `.row-toggleable` 只加在 `SettingRow` 组件上，而「弹幕过滤 / 朗读筛选」两页的行是
+ * `DanmakuFilterPanel` 手写的 `.setting-row`，那两页的鼠标就一直是默认箭头。
+ * 判据：行内有开关，且行内没有别的表单控件（荣耀等级行的数字输入框 → 不算可点行，
+ * 那行点歪不能误切开关，见 SettingRow / DanmakuFilterPanel 里的 switchOf）。
+ * 不支持 `:has()` 的运行时这里只是失效（退化成默认箭头），不影响点击逻辑。 */
+.setting-row:has([role='switch']):not(:has(input, select, textarea)) {
+  cursor: pointer;
+}
+
 /* 开关不再用原生 checkbox：统一用 `components/ToggleSwitch.vue`
    （40×22 滑动开关，见那里面关于命中区与误触的说明）。不要再往插槽里写
-   `<input type="checkbox" class="switch">` —— SettingRow 的整行可点只认 role="switch"。 */
+   `<input type="checkbox" class="switch">` —— 整行可点只认 `role="switch"`。 */
 
 /* 滑块 + 右侧数值：弹幕页（字号/行间距/描边宽度）、朗读页（语速/音量）、弹幕窗标签（宽/高）共用 */
 .size-control {
