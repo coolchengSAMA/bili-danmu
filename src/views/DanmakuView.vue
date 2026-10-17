@@ -7,6 +7,7 @@ import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
 import SaveTip from '../components/SaveTip.vue'
 import SenderWindowPanel from '../components/SenderWindowPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
+import ToggleSwitch from '../components/ToggleSwitch.vue'
 import { useSaveTip } from '../composables/useSaveTip'
 import { emitDanmakuPreview, clearDanmakuPreview } from '../danmaku-preview'
 import {
@@ -215,15 +216,15 @@ onMounted(async () => {
         </SettingRow>
 
         <SettingRow label="显示舰长/房管标记">
-          <input v-model="style.show_role" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="style.show_role" @change="apply()" />
         </SettingRow>
 
         <SettingRow label="显示粉丝牌">
-          <input v-model="style.show_medal" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="style.show_medal" @change="apply()" />
         </SettingRow>
 
         <SettingRow label="显示荣耀等级">
-          <input v-model="style.show_wealth" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="style.show_wealth" @change="apply()" />
         </SettingRow>
 
         <p class="tip">
@@ -273,11 +274,11 @@ onMounted(async () => {
         </SettingRow>
 
         <SettingRow label="文字加粗">
-          <input v-model="style.bold" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="style.bold" @change="apply()" />
         </SettingRow>
 
         <SettingRow label="文字描边">
-          <input v-model="style.outline" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="style.outline" @change="apply()" />
         </SettingRow>
 
         <SettingRow label="描边颜色">

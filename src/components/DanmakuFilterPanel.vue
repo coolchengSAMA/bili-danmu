@@ -2,6 +2,7 @@
 import { onUnmounted, ref, watch } from 'vue'
 
 import { DEFAULT_DANMAKU_FILTER, type DanmakuFilter } from '../types/ipc'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 // 弹幕过滤表单：显示筛选（DanmakuView）与朗读筛选（TtsView）共用同一套规则，
 // 仅「显示 / 朗读」措辞不同，避免两处 markup 各改一遍后语义漂移。
@@ -71,13 +72,19 @@ onUnmounted(() => {
 /**
  * 点行内空白 / 标签文字 = 点这一行的开关（与 `SettingRow` 同一套做法）
  *
- * 这几行是本组件手写的（第三行的标签里嵌了数字输入框，套不进 SettingRow），
- * 所以整行可点的逻辑在这里再实现一次：点在控件上的点击一律放行。
+ * 这几行是本组件手写的（荣耀等级那一行的标签里嵌了数字输入框，套不进 SettingRow），
+ * 所以整行可点的逻辑在这里再实现一次：点在控件上的点击一律放行；
+ * 行里除了开关还有其它控件时也不接管（荣耀等级行点歪到数字框旁边不能误切开关）。
  */
 function onRowClick(e: MouseEvent) {
   const el = e.target as HTMLElement | null
   if (!el || el.closest('input, select, textarea, button, a, label')) return
-  el.closest('.setting-row')?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click()
+  const rowEl = el.closest('.setting-row')
+  if (!rowEl) return
+  const controls = rowEl.querySelectorAll('input, select, textarea, button')
+  if (controls.length !== 1) return
+  const only = controls[0]
+  if (only.getAttribute('role') === 'switch') (only as HTMLElement).click()
 }
 
 function emitChange() {
@@ -96,12 +103,12 @@ function emitChange() {
   <div class="setting-card">
     <div class="setting-row" @click="onRowClick">
       <span class="label">只{{ verb }}舰长 / 房管弹幕</span>
-      <input v-model="draft.enable_guard_admin" type="checkbox" class="switch" @change="emitChange()" />
+      <ToggleSwitch v-model="draft.enable_guard_admin" @change="emitChange()" />
     </div>
 
     <div class="setting-row" @click="onRowClick">
       <span class="label">只{{ verb }}有粉丝牌的弹幕</span>
-      <input v-model="draft.enable_medal" type="checkbox" class="switch" @change="emitChange()" />
+      <ToggleSwitch v-model="draft.enable_medal" @change="emitChange()" />
     </div>
 
     <div class="setting-row" @click="onRowClick">
@@ -116,7 +123,7 @@ function emitChange() {
           @change="emitChange()" />
         的弹幕
       </span>
-      <input v-model="draft.enable_wealth" type="checkbox" class="switch" @change="emitChange()" />
+      <ToggleSwitch v-model="draft.enable_wealth" @change="emitChange()" />
     </div>
     <p class="tip">同时开多条时，满足任一条就{{ verb }}；都不开 = 谁发都{{ verb }}。</p>
   </div>
@@ -124,7 +131,7 @@ function emitChange() {
   <div class="setting-card words-card">
     <div class="setting-row" @click="onRowClick">
       <span class="label">屏蔽含敏感词的弹幕</span>
-      <input v-model="draft.enable_sensitive" type="checkbox" class="switch" @change="emitChange()" />
+      <ToggleSwitch v-model="draft.enable_sensitive" @change="emitChange()" />
     </div>
     <p class="tip">
       每行一个关键词（也可用逗号隔开）。命中任一词就整条不{{ verb }}，舰长 / 房管也不豁免； 改完 0.6

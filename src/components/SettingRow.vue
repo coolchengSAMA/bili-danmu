@@ -8,25 +8,39 @@ import { onMounted, ref } from 'vue'
 defineProps<{ label: string }>()
 
 const row = ref<HTMLElement | null>(null)
-// 行内是复选框时整行可点（见 onRowClick）
+// 行内是开关时整行可点（见 onRowClick）
 const toggleable = ref(false)
 onMounted(() => {
-  toggleable.value = !!row.value?.querySelector('input[type="checkbox"]')
+  toggleable.value = !!switchOf(row.value)
 })
+
+/**
+ * 本行的开关；不满足「整行唯一控件」时返回 null
+ *
+ * 只有整行唯一控件就是这个开关时才让整行可点：行里还有别的控件时
+ * （弹幕过滤页的荣耀等级行，标签里嵌着数字输入框），点歪到输入框旁边会误切开关。
+ */
+function switchOf(el: HTMLElement | null): HTMLElement | null {
+  if (!el) return null
+  const controls = el.querySelectorAll('input, select, textarea, button')
+  if (controls.length !== 1) return null
+  const only = controls[0] as HTMLElement
+  return only.getAttribute('role') === 'switch' ? only : null
+}
 
 /**
  * 点行内空白 / 标签文字 = 点这一行的开关
  *
- * 起因：开关只有 17px 的方框能点，点「字号」「显示粉丝牌」这些文字毫无反应，
+ * 起因：开关原来只有 17px 的方框能点，点「字号」「显示粉丝牌」这些文字毫无反应，
  * 用户会以为开关坏了。这里只接管「没点在控件上」的点击：
  * 点在滑块 / 下拉 / 按钮 / 输入框上时直接放行——那些行里有点一下就会真的执行操作的
  * 按钮（试听、发送测试弹幕、录制快捷键），误触发的后果比不切换开关更糟。
- * 只找复选框：滑块、下拉这些行不做「整行可点」，避免点一下就把值改了。
+ * 开关换成 40×22 的滑动开关后命中区本身够大，所以不再把「行内空白」当成一个大按钮。
  */
 function onRowClick(e: MouseEvent) {
   const el = e.target as HTMLElement | null
   if (!el || el.closest('input, select, textarea, button, a, label')) return
-  row.value?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click()
+  switchOf(row.value)?.click()
 }
 </script>
 
@@ -40,7 +54,7 @@ function onRowClick(e: MouseEvent) {
 <style scoped>
 /* 可点行给出鼠标提示：整行空白与标签文字都能切换开关 */
 .row-toggleable,
-.row-toggleable .switch {
+.row-toggleable [role='switch'] {
   cursor: pointer;
 }
 </style>

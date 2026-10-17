@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { onMounted, onUnmounted, ref } from 'vue'
 
 import SettingRow from './SettingRow.vue'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 // 「弹幕窗」标签页：显示 / 鼠标穿透 / 始终置顶 / 宽高。
 //
@@ -153,27 +154,15 @@ onUnmounted(() => {
     <p v-if="errMsg" class="panel-error">{{ errMsg }}</p>
 
     <SettingRow label="显示弹幕窗">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="ov.visible"
-        @change="setVisible(($event.target as HTMLInputElement).checked)" />
+      <ToggleSwitch :model-value="ov.visible" @change="setVisible(!ov.visible)" />
     </SettingRow>
 
     <SettingRow label="鼠标穿透">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="ov.clickthrough"
-        @change="setClickthrough(($event.target as HTMLInputElement).checked)" />
+      <ToggleSwitch :model-value="ov.clickthrough" @change="setClickthrough(!ov.clickthrough)" />
     </SettingRow>
 
     <SettingRow label="始终置顶">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="ov.alwaysOnTop"
-        @change="setAlwaysOnTop(($event.target as HTMLInputElement).checked)" />
+      <ToggleSwitch :model-value="ov.alwaysOnTop" @change="setAlwaysOnTop(!ov.alwaysOnTop)" />
     </SettingRow>
 
     <SettingRow label="宽度">
@@ -195,19 +184,11 @@ onUnmounted(() => {
     </SettingRow>
 
     <SettingRow label="显示在看人数">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="online.showOnline"
-        @change="setAudience({ showOnline: ($event.target as HTMLInputElement).checked })" />
+      <ToggleSwitch :model-value="online.showOnline" @change="setAudience({ showOnline: !online.showOnline })" />
     </SettingRow>
 
     <SettingRow label="显示实时在线榜">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="online.showRank"
-        @change="setAudience({ showRank: ($event.target as HTMLInputElement).checked })" />
+      <ToggleSwitch :model-value="online.showRank" @change="setAudience({ showRank: !online.showRank })" />
     </SettingRow>
 
     <p class="tip">

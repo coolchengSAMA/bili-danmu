@@ -5,6 +5,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 import { DEFAULT_SENDER_CONFIG, type SenderConfig } from '../types/ipc'
 import SettingRow from './SettingRow.vue'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 // 「发送框」标签页：整条发送框的显示开关 + 全局快捷键录制。
 //
@@ -164,11 +165,7 @@ onUnmounted(() => {
     <p v-if="errMsg" class="panel-error">{{ errMsg }}</p>
 
     <SettingRow label="显示发送框">
-      <input
-        type="checkbox"
-        class="switch"
-        :checked="cfg.visible"
-        @change="save({ ...cfg, visible: ($event.target as HTMLInputElement).checked })" />
+      <ToggleSwitch :model-value="cfg.visible" @change="save({ ...cfg, visible: !cfg.visible })" />
     </SettingRow>
 
     <SettingRow label="显示/隐藏快捷键">

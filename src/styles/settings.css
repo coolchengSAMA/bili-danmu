@@ -89,12 +89,9 @@
   border-bottom: none;
 }
 
-/* 通用表单控件 */
-.switch {
-  width: 17px;
-  height: 17px;
-  accent-color: var(--accent);
-}
+/* 开关不再用原生 checkbox：统一用 `components/ToggleSwitch.vue`
+   （40×22 滑动开关，见那里面关于命中区与误触的说明）。不要再往插槽里写
+   `<input type="checkbox" class="switch">` —— SettingRow 的整行可点只认 role="switch"。 */
 
 /* 滑块 + 右侧数值：弹幕页（字号/行间距/描边宽度）、朗读页（语速/音量）、弹幕窗标签（宽/高）共用 */
 .size-control {

@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 
 import SaveTip from '../components/SaveTip.vue'
 import SettingRow from '../components/SettingRow.vue'
+import ToggleSwitch from '../components/ToggleSwitch.vue'
 import { useSaveTip } from '../composables/useSaveTip'
 import {
   DEFAULT_GIFT_CONFIG,
@@ -91,7 +92,7 @@ onMounted(async () => {
     <section v-show="tab === 'gift'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="在弹幕窗显示礼物区">
-          <input v-model="gift.enabled" type="checkbox" class="switch" @change="apply()" />
+          <ToggleSwitch v-model="gift.enabled" @change="apply()" />
         </SettingRow>
 
         <SettingRow label="金额门槛">
@@ -127,7 +128,7 @@ onMounted(async () => {
     <section v-show="tab === 'giftTts'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="朗读打赏（礼物 / 醒目留言 / 上舰）">
-          <input v-model="giftTts.enabled" type="checkbox" class="switch" @change="applyGiftTts()" />
+          <ToggleSwitch v-model="giftTts.enabled" @change="applyGiftTts()" />
         </SettingRow>
 
         <SettingRow label="朗读金额门槛">
@@ -155,11 +156,11 @@ onMounted(async () => {
     <section v-show="tab === 'welcome'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="在弹幕窗显示欢迎信息">
-          <input v-model="welcome.enabled" type="checkbox" class="switch" @change="applyWelcome()" />
+          <ToggleSwitch v-model="welcome.enabled" @change="applyWelcome()" />
         </SettingRow>
 
         <SettingRow label="朗读舰长进场">
-          <input v-model="welcome.tts_guard" type="checkbox" class="switch" @change="applyWelcome()" />
+          <ToggleSwitch v-model="welcome.tts_guard" @change="applyWelcome()" />
         </SettingRow>
 
         <p class="tip">

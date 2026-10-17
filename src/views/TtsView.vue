@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
 import SaveTip from '../components/SaveTip.vue'
 import SettingRow from '../components/SettingRow.vue'
+import ToggleSwitch from '../components/ToggleSwitch.vue'
 import { useSaveTip } from '../composables/useSaveTip'
 import { useTtsConfig } from '../composables/useTtsConfig'
 
@@ -48,7 +49,7 @@ function applyFilter(next: DanmakuFilter) {
     <section v-show="tab === 'engine'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="开启弹幕朗读">
-          <input v-model="config.enabled" type="checkbox" class="switch" @change="save()" />
+          <ToggleSwitch v-model="config.enabled" @change="save()" />
         </SettingRow>
 
         <SettingRow label="音色">
@@ -95,15 +96,15 @@ function applyFilter(next: DanmakuFilter) {
     <section v-show="tab === 'content'" class="tab-pane">
       <div class="setting-card">
         <SettingRow label="朗读用户名">
-          <input v-model="config.read_username" type="checkbox" class="switch" @change="save()" />
+          <ToggleSwitch v-model="config.read_username" @change="save()" />
         </SettingRow>
 
         <SettingRow label="朗读身份前缀（房管 / 舰长）">
-          <input v-model="config.read_role" type="checkbox" class="switch" @change="save()" />
+          <ToggleSwitch v-model="config.read_role" @change="save()" />
         </SettingRow>
 
         <SettingRow label="弹幕堆积时只念最新的（当前这条念完）">
-          <input v-model="config.interrupt_on_backlog" type="checkbox" class="switch" @change="save()" />
+          <ToggleSwitch v-model="config.interrupt_on_backlog" @change="save()" />
         </SettingRow>
 
         <SettingRow label="弹幕内容最大朗读字数（0 = 不限制）">
@@ -127,7 +128,7 @@ function applyFilter(next: DanmakuFilter) {
       <p class="tip">这里的规则只影响朗读，与「弹幕 → 弹幕过滤」的显示筛选各自独立。</p>
       <div class="setting-card">
         <SettingRow label="朗读表情弹幕">
-          <input v-model="config.read_emote" type="checkbox" class="switch" @change="save()" />
+          <ToggleSwitch v-model="config.read_emote" @change="save()" />
         </SettingRow>
         <p class="tip">默认关：表情不参与朗读（「今天真好[花]」只念「今天真好」）。打开后表情照念。</p>
       </div>
