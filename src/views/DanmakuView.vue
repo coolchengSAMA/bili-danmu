@@ -4,7 +4,6 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
 import OverlayWindowPanel from '../components/OverlayWindowPanel.vue'
-import SaveTip from '../components/SaveTip.vue'
 import SenderWindowPanel from '../components/SenderWindowPanel.vue'
 import SettingRow from '../components/SettingRow.vue'
 import ToggleSwitch from '../components/ToggleSwitch.vue'
@@ -29,7 +28,7 @@ const tab = ref<'style' | 'color' | 'window' | 'sender' | 'filter'>('style')
 // 弹幕过滤配置（应用后 Rust 广播给 Overlay 实时生效并持久化）
 const filter = ref<DanmakuFilter>({ ...DEFAULT_DANMAKU_FILTER })
 
-const { savedTip, opError, showSaved, showError } = useSaveTip()
+const { showSaved, showError } = useSaveTip()
 
 const FONT_CHOICES = [
   { label: '微软雅黑 UI', value: 'Microsoft YaHei UI' },
@@ -145,7 +144,6 @@ onMounted(async () => {
 
 <template>
   <div class="danmaku-page">
-    <SaveTip :saved="savedTip" :error="opError" />
     <div class="tabs">
       <button
         v-for="t in [

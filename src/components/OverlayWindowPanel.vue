@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { onMounted, onUnmounted, ref } from 'vue'
 
+import { useSaveTip } from '../composables/useSaveTip'
 import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
@@ -10,69 +11,62 @@ import ToggleSwitch from './ToggleSwitch.vue'
 //
 // 状态全部留在本组件内（与弹幕样式、弹幕过滤无耦合），父页面只管挂载。
 // 设置卡片、设置行与开关的样式来自全局 styles/settings.css；
-// 失败提示用独立的 .panel-error，避免与页面的 .error 样式互相影响。
+// 保存结果与失败原因统一走全局浮层（`composables/useSaveTip`，由 App.vue 挂载），
+// 不再在本卡片内联一行字——内联提示出现时会把下方内容顶下去。
 const winSize = ref({ width: 480, height: 240 })
 // 三个开关的初值与 Rust 侧 OverlayState 的默认值一致（创建窗口时就是这三态），
 // 避免读到真实状态前先闪一下错误勾选；挂载后再用命令读一次对齐
 const ov = ref({ visible: true, clickthrough: false, alwaysOnTop: true })
 // 右侧在线列的两个显示开关（默认开，与 config/types.rs 的 OverlayStyle::default 一致）
 const online = ref({ showOnline: true, showRank: true })
-const errMsg = ref('')
-let errTimer: ReturnType<typeof setTimeout> | undefined
+const { showSaved, showError } = useSaveTip()
 // 窗口被手动拖动边缘缩放时由 Rust 广播 overlay-size 同步过来
 let unlistenSize: UnlistenFn | undefined
 // 开关从发送框那一侧被改动时由 Rust 广播过来（两个入口必须双向同步）
 let unlistenVisible: UnlistenFn | undefined
 let unlistenClickthrough: UnlistenFn | undefined
 
-/** 操作失败就地提示（3s 后自动消失），不打断页面其它区域的保存提示 */
-function fail(e: unknown) {
-  errMsg.value = String(e)
-  if (errTimer) clearTimeout(errTimer)
-  errTimer = setTimeout(() => (errMsg.value = ''), 3000)
+/**
+ * 统一动作包装：成功 → 右下角浮层「已应用并保存」，失败 → 同一浮层显示原因
+ *
+ * 提示是全局单例（`composables/useSaveTip`），所以本页 6 个动作的反馈与「弹幕样式」
+ * 「朗读筛选」等页面完全一致，也不再在卡片里内联一行字（那会把下方内容顶下去）。
+ */
+async function act(fn: () => Promise<void>) {
+  try {
+    await fn()
+    showSaved()
+  } catch (e) {
+    showError(e)
+  }
 }
 
-async function setVisible(v: boolean) {
-  errMsg.value = ''
-  try {
+function setVisible(v: boolean) {
+  return act(async () => {
     ov.value.visible = await invoke<boolean>('overlay_set_visible', { visible: v })
-  } catch (e) {
-    fail(e)
-  }
+  })
 }
 
-async function setClickthrough(v: boolean) {
-  errMsg.value = ''
-  try {
-    ov.value.clickthrough = await invoke<boolean>('overlay_set_clickthrough', {
-      enabled: v,
-    })
-  } catch (e) {
-    fail(e)
-  }
+function setClickthrough(v: boolean) {
+  return act(async () => {
+    ov.value.clickthrough = await invoke<boolean>('overlay_set_clickthrough', { enabled: v })
+  })
 }
 
-async function setAlwaysOnTop(v: boolean) {
-  errMsg.value = ''
-  try {
-    ov.value.alwaysOnTop = await invoke<boolean>('overlay_set_always_on_top', {
-      enabled: v,
-    })
-  } catch (e) {
-    fail(e)
-  }
+function setAlwaysOnTop(v: boolean) {
+  return act(async () => {
+    ov.value.alwaysOnTop = await invoke<boolean>('overlay_set_always_on_top', { enabled: v })
+  })
 }
 
 /** 提交窗口宽高（滑块拖动结束后才调用，避免拖动中反复改窗口） */
-async function commitSize() {
-  try {
+function commitSize() {
+  return act(async () => {
     await invoke('overlay_set_size', {
       width: winSize.value.width,
       height: winSize.value.height,
     })
-  } catch (e) {
-    fail(e)
-  }
+  })
 }
 
 /**
@@ -81,18 +75,15 @@ async function commitSize() {
  * 只提交这两个字段（Rust 侧做 load-modify-save），不提交整份样式：
  * 否则会把「弹幕样式」页正在改的其它字段一起覆盖掉。
  */
-async function setAudience(patch: Partial<{ showOnline: boolean; showRank: boolean }>) {
-  errMsg.value = ''
+function setAudience(patch: Partial<{ showOnline: boolean; showRank: boolean }>) {
   const next = { ...online.value, ...patch }
-  try {
+  return act(async () => {
     await invoke('overlay_set_audience', {
       showOnline: next.showOnline,
       showRank: next.showRank,
     })
     online.value = next
-  } catch (e) {
-    fail(e)
-  }
+  })
 }
 
 /**
@@ -101,13 +92,10 @@ async function setAudience(patch: Partial<{ showOnline: boolean; showRank: boole
  * 换显示器 / 改分辨率 / 拔掉副屏之后，记忆的位置可能落在不存在的坐标上：
  * 弹幕窗看不见、也拖不回来（设置页只能改宽高，没有位置入口），这是那条兜底路径的入口。
  */
-async function resetPosition() {
-  errMsg.value = ''
-  try {
+function resetPosition() {
+  return act(async () => {
     await invoke('overlay_reset_position')
-  } catch (e) {
-    fail(e)
-  }
+  })
 }
 
 onMounted(async () => {
@@ -145,14 +133,11 @@ onUnmounted(() => {
   unlistenSize?.()
   unlistenVisible?.()
   unlistenClickthrough?.()
-  if (errTimer) clearTimeout(errTimer)
 })
 </script>
 
 <template>
   <div class="setting-card">
-    <p v-if="errMsg" class="panel-error">{{ errMsg }}</p>
-
     <SettingRow label="显示弹幕窗">
       <ToggleSwitch :model-value="ov.visible" @change="setVisible(!ov.visible)" />
     </SettingRow>
@@ -223,12 +208,5 @@ onUnmounted(() => {
 .ghost-btn:hover {
   color: var(--text);
   border-color: var(--accent);
-}
-
-/* 只在本标签页内提示，不与页面顶部的样式/过滤保存提示混用 */
-.panel-error {
-  color: var(--red);
-  font-size: 15px;
-  padding: 6px 0 0;
 }
 </style>

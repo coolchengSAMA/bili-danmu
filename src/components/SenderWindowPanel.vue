@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { onMounted, onUnmounted, ref } from 'vue'
 
+import { useSaveTip } from '../composables/useSaveTip'
 import { DEFAULT_SENDER_CONFIG, type SenderConfig } from '../types/ipc'
 import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
@@ -16,11 +17,9 @@ const cfg = ref<SenderConfig>({ ...DEFAULT_SENDER_CONFIG })
 // 录制态：点一下按钮进入，按下组合键即保存；Esc 取消；Backspace/Delete 清除
 const recording = ref(false)
 const pending = ref('')
-const errMsg = ref('')
-const savedTip = ref(false)
+// 保存结果与失败原因统一走全局浮层（App.vue 挂载），不在卡片里内联（内联会把下方内容顶下去）
+const { showSaved, showError } = useSaveTip()
 let unlistenVisible: UnlistenFn | undefined
-let errTimer: ReturnType<typeof setTimeout> | undefined
-let savedTimer: ReturnType<typeof setTimeout> | undefined
 
 /** 只按了修饰键时也给个反馈，否则用户以为没录上 */
 const MODIFIER_CODES = [
@@ -33,18 +32,6 @@ const MODIFIER_CODES = [
   'MetaLeft',
   'MetaRight',
 ]
-
-function showErr(e: unknown) {
-  errMsg.value = String(e)
-  if (errTimer) clearTimeout(errTimer)
-  errTimer = setTimeout(() => (errMsg.value = ''), 4000)
-}
-
-function showSaved() {
-  savedTip.value = true
-  if (savedTimer) clearTimeout(savedTimer)
-  savedTimer = setTimeout(() => (savedTip.value = false), 2000)
-}
 
 /** `Alt+KeyQ` → `Alt + Q`（给人看的写法；键码按 UI Events 名去掉 Key/Digit 前缀） */
 function pretty(hotkey: string): string {
@@ -76,7 +63,7 @@ async function refreshHotkeyError(): Promise<boolean> {
   try {
     const e = await invoke<string | null>('sender_hotkey_error')
     if (e) {
-      showErr(e)
+      showError(e)
       return true
     }
     return false
@@ -88,7 +75,6 @@ async function refreshHotkeyError(): Promise<boolean> {
 
 /** 保存（Rust 先试注册快捷键，注册失败会整体不生效并把原因回传） */
 async function save(next: SenderConfig) {
-  errMsg.value = ''
   try {
     cfg.value = await invoke<SenderConfig>('sender_set_config', { sender: { ...next } })
     // 保存可能成功、但快捷键仍没注册上（例如键位在启动时就被占用、这次保存的可见性改动照常生效）：
@@ -96,7 +82,7 @@ async function save(next: SenderConfig) {
     if (await refreshHotkeyError()) return
     showSaved()
   } catch (e) {
-    showErr(e)
+    showError(e)
   }
 }
 
@@ -132,7 +118,7 @@ async function onRecordKey(e: KeyboardEvent) {
   const isFunctionKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(e.code)
   if (!hasModifier && !isFunctionKey) {
     // 单字母/数字做全局热键会把普通输入也吃掉，故要求≥1 个修饰键（功能键除外）
-    errMsg.value = '请至少带一个修饰键（Ctrl / Alt / Shift），或使用 F1-F24'
+    showError('请至少带一个修饰键（Ctrl / Alt / Shift），或使用 F1-F24')
     return
   }
   stopRecording()
@@ -155,15 +141,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unlistenVisible?.()
-  if (errTimer) clearTimeout(errTimer)
-  if (savedTimer) clearTimeout(savedTimer)
 })
 </script>
 
 <template>
   <div class="setting-card">
-    <p v-if="errMsg" class="panel-error">{{ errMsg }}</p>
-
     <SettingRow label="显示发送框">
       <ToggleSwitch :model-value="cfg.visible" @change="save({ ...cfg, visible: !cfg.visible })" />
     </SettingRow>
@@ -199,25 +181,10 @@ onUnmounted(() => {
       注意：隐藏发送框会连右端的「穿透」按钮一起隐藏。穿透的开关仍在主界面「弹幕窗」标签里，
       穿透开着时用托盘左键唤出主窗口即可关闭。
     </p>
-
-    <p v-if="savedTip" class="saved">✓ 已应用并保存</p>
   </div>
 </template>
 
 <style scoped>
-/* 只在本标签页内提示，不与页面顶部的保存提示混用（同 OverlayWindowPanel） */
-.panel-error {
-  color: var(--red);
-  font-size: 15px;
-  padding: 6px 0 0;
-}
-
-.saved {
-  color: var(--green);
-  font-size: 14px;
-  padding: 2px 0 0;
-}
-
 .hotkey-box {
   display: flex;
   align-items: center;

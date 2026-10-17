@@ -2,7 +2,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { onMounted, ref } from 'vue'
 
-import SaveTip from '../components/SaveTip.vue'
 import SettingRow from '../components/SettingRow.vue'
 import ToggleSwitch from '../components/ToggleSwitch.vue'
 import { useSaveTip } from '../composables/useSaveTip'
@@ -25,7 +24,7 @@ const giftTts = ref<GiftTtsConfig>({ ...DEFAULT_GIFT_TTS_CONFIG })
 // 欢迎信息配置（默认关；限流在 Rust 侧，这里只负责开关读写）
 const welcome = ref<WelcomeConfig>({ ...DEFAULT_WELCOME_CONFIG })
 
-const { savedTip, opError, showSaved, showError } = useSaveTip()
+const { showSaved, showError } = useSaveTip()
 
 async function apply() {
   // 数字输入框可能被清空或填成负数，统一收敛到 0 再下发（0 = 不限）
@@ -73,7 +72,6 @@ onMounted(async () => {
 
 <template>
   <div class="streamer-page">
-    <SaveTip :saved="savedTip" :error="opError" />
     <div class="tabs">
       <button
         v-for="t in [

@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 
 import DanmakuFilterPanel from '../components/DanmakuFilterPanel.vue'
-import SaveTip from '../components/SaveTip.vue'
 import SettingRow from '../components/SettingRow.vue'
 import ToggleSwitch from '../components/ToggleSwitch.vue'
 import { useSaveTip } from '../composables/useSaveTip'
@@ -13,7 +12,7 @@ import type { DanmakuFilter } from '../types/ipc'
 // 页内标签：engine / content / filter
 const tab = ref<'engine' | 'content' | 'filter'>('engine')
 
-const { savedTip, opError, showSaved, showError } = useSaveTip()
+const { showSaved, showError } = useSaveTip()
 // 朗读配置与音色列表：与弹幕显示完全解耦，改动即时生效（下一段朗读开始用新参数）
 const { config, voices, testing, loadingVoices, customVoice, save, testSpeak, refreshVoices } = useTtsConfig(
   showSaved,
@@ -29,7 +28,6 @@ function applyFilter(next: DanmakuFilter) {
 <template>
   <div class="tts-page">
     <!-- 保存 / 错误提示：右下角浮层，不占文档流（出现在卡片内会把页面顶得抖动） -->
-    <SaveTip :saved="savedTip" :error="opError" />
 
     <div class="tabs">
       <button

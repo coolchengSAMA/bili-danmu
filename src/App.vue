@@ -2,7 +2,9 @@
 import { onMounted, ref, watch } from 'vue'
 
 import LoginDialog from './components/LoginDialog.vue'
+import SaveTip from './components/SaveTip.vue'
 import { refreshLogin } from './composables/useLogin'
+import { useSaveTip } from './composables/useSaveTip'
 import { checkUpdate } from './composables/useUpdate'
 import AboutView from './views/AboutView.vue'
 import DanmakuView from './views/DanmakuView.vue'
@@ -35,6 +37,11 @@ const contentEl = ref<HTMLElement | null>(null)
 watch(current, () => {
   if (contentEl.value) contentEl.value.scrollTop = 0
 })
+
+// 保存 / 操作失败提示是**全局单例**（`composables/useSaveTip`）：这里只挂一次浮层，
+// 任何页面或子组件（弹幕窗 / 发送框这些标签页）直接调用 showSaved() / showError() 即可。
+// 以前各页各挂一个、两个 fork 自有标签页干脆内联，导致「有的页面是浮层、有的内联、有的没有」。
+const { savedTip, opError } = useSaveTip()
 </script>
 
 <template>
@@ -65,6 +72,7 @@ watch(current, () => {
     </main>
   </div>
   <LoginDialog />
+  <SaveTip :saved="savedTip" :error="opError" />
 </template>
 
 <style scoped>
