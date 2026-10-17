@@ -1,7 +1,8 @@
 //! Edge TTS（微软 Edge 浏览器「朗读」）在线语音合成客户端
 //!
 //! 直连 `speech.platform.bing.com` 的 Read Aloud WebSocket，无 Python / 无 SDK 依赖：
-//!   1. 握手：URL 带 DRM 令牌 `Sec-MS-GEC` = SHA256(向下取整到 5 分钟的时间戳 + 固定客户端令牌)
+//!   1. 握手：URL 带 DRM 令牌 `Sec-MS-GEC`（v2：`<16 hex CS64>-<64 hex 改过常数的 SHA256>`，
+//!      由 `drm.rs` 生成；v1「纯 SHA256 + `1-` 前缀」在部分地区已 403）
 //!   2. 发 `speech.config` 声明输出格式（实测服务端不支持 raw PCM，只能 MP3）
 //!   3. 发 SSML 请求
 //!   4. 收文本帧（turn.start / response / turn.end）与二进制帧（音频分片）

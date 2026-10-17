@@ -96,7 +96,7 @@
 
 - 前端：Vue 3（`<script setup>`）+ Vite + TypeScript，包管理 pnpm
 - 桌面壳：Tauri 2（Rust，edition 2021）
-- Rust 关键依赖：tokio / reqwest（json、gzip；登录 Cookie 全程显式 header 传递）/ tokio-tungstenite（弹幕 WebSocket + Edge TTS WebSocket）/ native-tls（Edge TTS 自建 TCP 后显式包 TLS）/ futures-util（WS 收发）/ brotli-decompressor + flate2（弹幕包解压）/ md-5（WBI 签名）/ sha2（Edge TTS 的 Sec-MS-GEC 令牌）/ windows-sys（登录 Cookie 的 Windows DPAPI 加密、TTS 的 winmm MCI 播放）/ tauri-plugin-log（统一日志落盘，业务代码经 `log` 门面宏调用）/ tauri-plugin-global-shortcut（发送框显示/隐藏的全局快捷键，钉 `~2.3`——2.4 要求 tauri ^2.12 会把 lock 顶到 2.12 而 npm 侧 `@tauri-apps/api` 还是 2.11，`tauri build` 会拒绝打包）
+- Rust 关键依赖：tokio / reqwest（json、gzip；登录 Cookie 全程显式 header 传递）/ tokio-tungstenite（弹幕 WebSocket + Edge TTS WebSocket）/ native-tls（Edge TTS 自建 TCP 后显式包 TLS）/ futures-util（WS 收发）/ brotli-decompressor + flate2（弹幕包解压）/ md-5（WBI 签名）/ sha2（随机 hex / ConnectionId 生成；Sec-MS-GEC v2 令牌是 `edge/drm.rs` 里的手写哈希，不用 sha2）/ windows-sys（登录 Cookie 的 Windows DPAPI 加密、TTS 的 winmm MCI 播放）/ tauri-plugin-log（统一日志落盘，业务代码经 `log` 门面宏调用）/ tauri-plugin-global-shortcut（发送框显示/隐藏的全局快捷键，钉 `~2.3`——2.4 要求 tauri ^2.12 会把 lock 顶到 2.12 而 npm 侧 `@tauri-apps/api` 还是 2.11，`tauri build` 会拒绝打包）
 - 授权：GPL-3.0
 
 ## 常用命令
